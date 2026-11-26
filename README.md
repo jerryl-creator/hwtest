@@ -24,7 +24,8 @@
 
 ## Download
 
-Windows builds are attached to the [Releases](../../releases) page. Each is a single file with no installer:
+Windows builds are attached to the [Releases](../../releases) page. **Nothing to install**: no Rust, no runtime,
+no installer. Download one file and double-click it.
 
 | Your PC | Download |
 |---|---|
@@ -34,13 +35,17 @@ Windows builds are attached to the [Releases](../../releases) page. Each is a si
 Not sure? Open **Settings → System → About** and check *System type*: "x64-based" means `nyanspect.exe`, "ARM-based" means `nyanspect-arm64.exe`.
 Windows may show a SmartScreen warning because the file isn't code-signed: choose **More info → Run anyway**.
 
-## Building
+Nyanspect supports **Windows 10/11 and Linux**; macOS isn't supported. There's no ready-made Linux download yet,
+so on Linux [build it from source](#building-from-source-developers-only).
 
-### 1. Install Rust with rustup (required)
+## Building from source (developers only)
 
-Nyanspect supports **Windows 10/11 and Linux**. macOS isn't supported or tested.
+> **Just want to use Nyanspect on Windows?** You don't need anything in this section: download the `.exe` above.
+> Rust is only needed to build Nyanspect yourself, for example to change the code or to run it on Linux.
 
-Nyanspect is built with **rustup**, the official Rust installer. Use it even if your Linux distro has its own
+### 1. Install Rust with rustup
+
+Building Nyanspect needs **rustup**, the official Rust installer. Use it even if your Linux distro has its own
 `rust` package: only rustup can add the Windows target needed to build `nyanspect.exe`.
 
 **Linux**
