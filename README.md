@@ -51,3 +51,8 @@ Startup errors are shown in a dialog and saved to `hwtest-error.log` in the temp
 
 - `vendor/egui-winit` is a lightly patched copy of [egui-winit](https://github.com/emilk/egui) 0.37 (MIT OR Apache-2.0), used so the app can tell numpad keys apart from the main keys. See [vendor/egui-winit/HWTEST_PATCH.md](vendor/egui-winit/HWTEST_PATCH.md).
 - Japanese labels use a font already on the system (Noto Sans CJK on Linux, Yu Gothic or Meiryo on Windows). Without one, they are simply hidden.
+
+## License
+
+HW Test is released under the [MIT License](LICENSE).
+The patched copy of egui-winit in `vendor/egui-winit` keeps its original MIT OR Apache-2.0 license.
