@@ -74,7 +74,7 @@ impl App {
         // Restore remembered settings (skipped for dev screenshots so they're reproducible).
         let saved = cc
             .storage
-            .filter(|_| std::env::var("NYANSPECT_SHOT").is_err())
+            .filter(|_| !dev_run())
             .and_then(|st| eframe::get_value::<settings::Settings>(st, settings::KEY))
             .unwrap_or_default();
         app.keyboard.load_settings(&saved);
@@ -227,7 +227,15 @@ impl eframe::App for App {
         }
     }
 
+    fn persist_egui_memory(&self) -> bool {
+        !dev_run()
+    }
+
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        // Dev screenshot runs must never touch the user's saved settings.
+        if dev_run() {
+            return;
+        }
         let mut s = settings::Settings::default();
         self.keyboard.store_settings(&mut s);
         self.pixels.store_settings(&mut s);
@@ -382,6 +390,7 @@ fn run(renderer: eframe::Renderer) -> eframe::Result {
     let options = eframe::NativeOptions {
         renderer,
         multisampling: 0, // egui already anti-aliases its shapes
+        persist_window: !dev_run(),
         depth_buffer: 0,
         wgpu_options: egui_wgpu::WgpuConfiguration {
             wgpu_setup: egui_wgpu::WgpuSetup::CreateNew(setup),
@@ -454,6 +463,11 @@ fn fatal(msg: &str) {
     eprintln!("{text}");
 }
 
+/// True for automated dev runs (screenshots), which must not save or load the user's settings.
+fn dev_run() -> bool {
+    std::env::var("NYANSPECT_SHOT").is_ok()
+}
+
 /// Dev helper: `NYANSPECT_SHOT=out.png NYANSPECT_TAB=<index> nyanspect` saves a window screenshot and exits.
 fn dev_screenshot(ctx: &egui::Context, tab: &mut Tab) {
     // NYANSPECT_TAB=<index>; optionally NYANSPECT_TAB2=<index> takes over after 2.4 s (e.g. run a demo, then show the report).
@@ -469,6 +483,11 @@ fn dev_screenshot(ctx: &egui::Context, tab: &mut Tab) {
         }
     }
     let Ok(path) = std::env::var("NYANSPECT_SHOT") else { return };
+    if let Some((w, h)) = std::env::var("NYANSPECT_SIZE").ok().and_then(|v| v.split_once('x').map(|(w, h)| (w.parse::<f32>(), h.parse::<f32>()))) {
+        if let (Ok(w), Ok(h), true) = (w, h, time < 0.5) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
+        }
+    }
     if std::env::var("NYANSPECT_MAX").is_ok() && time < 0.5 {
         ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
     }

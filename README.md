@@ -8,20 +8,38 @@
 
 ## Features
 
+Seven tabs, each a test (plus a report). Your layout, sound and display settings are remembered between launches.
+
 **⌨ Keyboard**
 - Pick your keyboard: **Full** (with numpad), **TKL** (no numpad) or **75% / Laptop**, in **US (ANSI)** or **UK/EU (ISO)** style. Left/right Shift, Ctrl, Alt and Win are shown separately
-- **Chatter detection**: flags a worn or dirty switch that registers one press as two, with a warning on the key and a summary of affected keys
-- Keys turn silver once they work and glow white while held; a progress bar counts tested keys
-- Manga sound effects on every key press: a pop-up word (ドーン!! for Space, 決定! for Enter, …) plus a matching sound (a boom, a chime, a zap, …). Turn both off with the SFX button
+- **Chatter detection**: flags a worn or dirty switch that registers one press as two
+- **Rollover**: shows how many keys register at once (ghosting check)
+- Keys turn silver once they work and glow white while held
+- Manga sound effects on every key press: a pop-up word (ドーン!! for Space, 決定! for Enter, …) plus a matching sound. Turn both off with the SFX button
 
-**★ Dead pixels**
-- Fullscreen black, white, red, green, blue, cyan, magenta, yellow and gray
-- Click, Space or → for the next colour, ← for the previous, Esc to exit; optional auto-cycle
-- Optional stuck-pixel "fixer" (rapid RGB flashing, with a photosensitivity warning)
+**🖱 Mouse & touchpad**
+- Left, middle, right and the Back/Forward side buttons, scrolling in all four directions, and double-click
+- **Click chatter**: catches a worn switch that turns one click into a double-click
+- A drawing area that shows jumps or dead spots on a touchpad
 
-**♫ Speakers**
-- One button per output channel (stereo, 4.0, 5.1, 7.1), plus all channels, left/right alternate, and a 20 Hz – 20 kHz sweep
-- Sine, square or white noise, with adjustable frequency and volume, and a live waveform
+**🎮 Gamepad**
+- Every button, D-pad direction and analog trigger, plus both sticks with a live position dot
+- **Stick drift detection**: warns when a stick doesn't return to the centre
+- Rumble test for controllers that support it. Works with Xbox, PlayStation, Switch Pro and most other controllers
+
+**★ Display**
+- **Dead pixels**: fullscreen solid colours for dead (always black) and stuck pixels
+- **Backlight & uniformity**: black and dark grays for backlight bleed and clouding
+- **Gradients**: smooth ramps that show banding
+- **Click to mark** a bad spot; its exact pixel position goes in the report
+
+**🔊 Audio**
+- One button per speaker (stereo up to 7.1), left/right alternate, and a 20 Hz – 20 kHz sweep, with a **"Heard it?" Yes/No checklist** per speaker
+- **Microphone**: live level meter, waveform, and "record 3 s and play back". The mic only turns on when you press Start, and recordings are never saved
+
+**📋 Report**
+- A summary of every test (Pass / Issue found / In progress / Not tested) with the details
+- **Copy**, **Save as text** or **Save as image** (saved to your Downloads folder), handy when buying a used laptop or making a warranty claim
 
 ## Download
 
@@ -53,7 +71,7 @@ Or skip installing and run `./nyanspect` straight from the folder. To remove it 
 Not sure which download? Run `uname -m`: `x86_64` means the x86_64 file, `aarch64` means the arm64 one.
 
 It runs on Ubuntu 22.04 or newer, Debian 12+, Fedora, Arch and most other current distros, with Wayland or X11.
-It needs the ALSA sound library (`libasound`), which desktop systems already have.
+It needs the ALSA sound library (`libasound`) and `libudev` (for gamepads), which desktop systems already have.
 
 ## Building from source (developers only)
 
@@ -88,13 +106,13 @@ cargo --version
 
 ### 2. Build for Linux
 
-Install the ALSA development headers (used for sound):
+Install the ALSA (sound) and udev (gamepads) development headers:
 
 | Distro | Command |
 |---|---|
-| Arch | `sudo pacman -S alsa-lib` |
-| Debian / Ubuntu | `sudo apt install libasound2-dev pkg-config` |
-| Fedora | `sudo dnf install alsa-lib-devel` |
+| Arch | `sudo pacman -S alsa-lib systemd-libs` |
+| Debian / Ubuntu | `sudo apt install libasound2-dev libudev-dev pkg-config` |
+| Fedora | `sudo dnf install alsa-lib-devel systemd-devel` |
 
 ```bash
 cargo build --release
