@@ -4,6 +4,7 @@ mod chatter;
 mod keyboard;
 mod layouts;
 mod mic;
+mod mouse;
 mod pixels;
 mod settings;
 mod sfx;
@@ -18,12 +19,14 @@ use theme::alpha;
 #[derive(PartialEq, Clone, Copy)]
 enum Tab {
     Keyboard,
+    Mouse,
     Display,
     Audio,
 }
 
 const TABS: &[(Tab, &str, &str, &str)] = &[
     (Tab::Keyboard, "⌨", "Keyboard", "キーボード"),
+    (Tab::Mouse, "🖱", "Mouse", "マウス"),
     (Tab::Display, "★", "Display", "ディスプレイ"),
     (Tab::Audio, "🔊", "Audio", "オーディオ"),
 ];
@@ -37,6 +40,7 @@ struct App {
     pixels: pixels::PixelTest,
     speakers: speakers::SpeakerTest,
     mic: mic::MicTest,
+    mouse: mouse::MouseTest,
 }
 
 impl App {
@@ -55,6 +59,7 @@ impl App {
             pixels: pixels::PixelTest::default(),
             speakers: speakers::SpeakerTest::new(),
             mic: mic::MicTest::default(),
+            mouse: mouse::MouseTest::default(),
         };
         // Restore remembered settings (skipped for dev screenshots so they're reproducible).
         let saved = cc
@@ -155,6 +160,33 @@ impl eframe::App for App {
                 STEP.store(step + 1, Ordering::Relaxed);
             }
         }
+        // NYANSPECT_MOUSE_DEMO: draw a wavy path, click, double-click, scroll, and a chattering right button.
+        if std::env::var("NYANSPECT_MOUSE_DEMO").is_ok() && (1.0..2.2).contains(&t) {
+            let k = ((t - 1.0) / 1.2) as f32;
+            let pos = egui::pos2(420.0 + k * 500.0, 330.0 + (k * 14.0).sin() * 70.0);
+            raw.events.push(egui::Event::PointerMoved(pos));
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static DONE: AtomicU8 = AtomicU8::new(0);
+            let step = DONE.load(Ordering::Relaxed);
+            let click = |b, n, ev: &mut Vec<egui::Event>| {
+                for _ in 0..n {
+                    for pressed in [true, false] {
+                        ev.push(egui::Event::PointerButton { pos, button: b, pressed, modifiers: Default::default() });
+                    }
+                }
+            };
+            if step == 0 && t > 1.3 {
+                click(egui::PointerButton::Primary, 1, &mut raw.events);
+                DONE.store(1, Ordering::Relaxed);
+            } else if step == 1 && t > 1.6 {
+                click(egui::PointerButton::Primary, 2, &mut raw.events);
+                raw.events.push(egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Line, delta: egui::vec2(0.0, 1.0), modifiers: Default::default(), phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
+                DONE.store(2, Ordering::Relaxed);
+            } else if step == 2 && t > 1.9 {
+                click(egui::PointerButton::Secondary, 2, &mut raw.events);
+                DONE.store(3, Ordering::Relaxed);
+            }
+        }
         if std::env::var("NYANSPECT_DEMO").is_err() {
             return;
         }
@@ -215,8 +247,10 @@ impl eframe::App for App {
                 ui.set_opacity(appear);
                 ui.add_space((1.0 - appear) * 24.0);
                 self.keyboard.fit_height = ui.available_height();
+                self.mouse.fit_height = ui.available_height();
                 egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| match self.tab {
                     Tab::Keyboard => self.keyboard.ui(ui, &mut self.mascot, self.cjk),
+                    Tab::Mouse => self.mouse.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Display => self.pixels.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Audio => {
                         self.speakers.ui(ui, &mut self.mascot, self.cjk);
