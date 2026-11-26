@@ -17,14 +17,14 @@ use theme::alpha;
 #[derive(PartialEq, Clone, Copy)]
 enum Tab {
     Keyboard,
-    Pixels,
-    Speakers,
+    Display,
+    Audio,
 }
 
-const TABS: [(Tab, &str, &str, &str); 3] = [
+const TABS: &[(Tab, &str, &str, &str)] = &[
     (Tab::Keyboard, "⌨", "Keyboard", "キーボード"),
-    (Tab::Pixels, "★", "Dead Pixels", "ドット抜け"),
-    (Tab::Speakers, "♫", "Speakers", "スピーカー"),
+    (Tab::Display, "🖥", "Display", "ディスプレイ"),
+    (Tab::Audio, "🔊", "Audio", "オーディオ"),
 ];
 
 struct App {
@@ -95,8 +95,10 @@ impl App {
     }
 
     fn tab_bar(&mut self, ui: &mut egui::Ui) {
-        let tab_w = 138.0;
-        let (bar, _) = ui.allocate_exact_size(Vec2::new(tab_w * 3.0 + 12.0, 50.0), Sense::hover());
+        // Tabs share the space: wide with few tabs, narrower as more are added.
+        let tab_w = if TABS.len() <= 3 { 138.0 } else { 112.0 };
+        let font = if TABS.len() <= 3 { 14.5 } else { 13.5 };
+        let (bar, _) = ui.allocate_exact_size(Vec2::new(tab_w * TABS.len() as f32 + 12.0, 50.0), Sense::hover());
         let p = ui.painter().clone();
         p.rect_filled(bar, 25.0, Color32::from_rgba_unmultiplied(10, 10, 12, 200));
         p.rect_stroke(bar, 25.0, egui::Stroke::new(1.0, alpha(theme::LIGHT, 0.15)), egui::StrokeKind::Inside);
@@ -120,7 +122,7 @@ impl App {
             }
             let col = if sel { theme::INK } else { theme::lerp_color(theme::TEXT_DIM, theme::TEXT, hover) };
             let dy = if self.cjk { -6.0 } else { 0.0 };
-            p.text(r.center() + Vec2::new(0.0, dy), Align2::CENTER_CENTER, format!("{icon}  {name}"), theme::bold(14.5), col);
+            p.text(r.center() + Vec2::new(0.0, dy), Align2::CENTER_CENTER, format!("{icon} {name}"), theme::bold(font), col);
             if self.cjk {
                 p.text(r.center() + Vec2::new(0.0, 11.0), Align2::CENTER_CENTER, *jp, egui::FontId::proportional(10.0), alpha(col, 0.75));
             }
@@ -178,7 +180,7 @@ impl eframe::App for App {
 
         egui::Panel::top("tabs").show(ui, |ui| self.header(ui));
 
-        if self.tab != Tab::Speakers {
+        if self.tab != Tab::Audio {
             self.speakers.stop();
         }
 
@@ -192,8 +194,8 @@ impl eframe::App for App {
                 self.keyboard.fit_height = ui.available_height();
                 egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| match self.tab {
                     Tab::Keyboard => self.keyboard.ui(ui, &mut self.mascot, self.cjk),
-                    Tab::Pixels => self.pixels.ui(ui, &mut self.mascot, self.cjk),
-                    Tab::Speakers => self.speakers.ui(ui, &mut self.mascot, self.cjk),
+                    Tab::Display => self.pixels.ui(ui, &mut self.mascot, self.cjk),
+                    Tab::Audio => self.speakers.ui(ui, &mut self.mascot, self.cjk),
                 });
             });
         for sound in self.keyboard.take_sounds() {
@@ -363,10 +365,10 @@ fn fatal(msg: &str) {
     eprintln!("{text}");
 }
 
-/// Dev helper: `NYANSPECT_SHOT=out.png NYANSPECT_TAB=0|1|2 nyanspect` saves a window screenshot and exits.
+/// Dev helper: `NYANSPECT_SHOT=out.png NYANSPECT_TAB=<index> nyanspect` saves a window screenshot and exits.
 fn dev_screenshot(ctx: &egui::Context, tab: &mut Tab) {
     if let Ok(t) = std::env::var("NYANSPECT_TAB") {
-        *tab = TABS[t.parse::<usize>().unwrap_or(0).min(2)].0;
+        *tab = TABS[t.parse::<usize>().unwrap_or(0).min(TABS.len() - 1)].0;
     }
     // NYANSPECT_QUIT_AT=<seconds>: close normally (settings get saved) after that long.
     if let Some(q) = std::env::var("NYANSPECT_QUIT_AT").ok().and_then(|v| v.parse::<f64>().ok()) {

@@ -36,6 +36,8 @@ pub struct KeyboardTest {
     rng: u32,
     celebrated: bool,
     sfx: Sfx,
+    /// Most keys held down at the same time (rollover).
+    max_held: usize,
     /// Height the page may fill (set by the app each frame), so the keyboard scales to fit.
     pub fit_height: f32,
     last_card_h: f32,
@@ -60,6 +62,7 @@ impl Default for KeyboardTest {
             sfx: Sfx::default(),
             fit_height: 0.0,
             last_card_h: 0.0,
+            max_held: 0,
         }
     }
 }
@@ -128,6 +131,7 @@ impl KeyboardTest {
                     let key = physical_key.unwrap_or(key);
                     if pressed {
                         self.down.insert(key);
+                        self.max_held = self.max_held.max(self.down.len());
                         let first = self.tested.insert(key);
                         if !repeat {
                             self.pending.push((key, first));
@@ -190,6 +194,7 @@ impl KeyboardTest {
                         self.log.clear();
                         self.chatter.clear();
                         self.chatter_at.clear();
+                        self.max_held = 0;
                         self.celebrated = false;
                     }
                     ui.add_space(6.0);
@@ -261,6 +266,22 @@ impl KeyboardTest {
                 p.text(bar.center(), Align2::CENTER_CENTER, format!("{done} / {total} keys"), theme::bold(12.5), Color32::WHITE);
 
                 ui.add_space(12.0);
+                // Rollover: how many keys register at once.
+                let held = self.down.len();
+                egui::Frame::new()
+                    .fill(if held >= 2 { Color32::WHITE } else { alpha(theme::SILVER, 0.18) })
+                    .corner_radius(10)
+                    .inner_margin(egui::Margin::symmetric(9, 2))
+                    .show(ui, |ui| {
+                        let col = if held >= 2 { theme::INK } else { theme::TEXT };
+                        ui.label(egui::RichText::new(format!("Held: {held} · best {}", self.max_held)).font(theme::bold(12.5)).color(col));
+                    })
+                    .response
+                    .on_hover_text(
+                        "Rollover test: hold several keys at once. If a key you're holding doesn't light up, \
+                         your keyboard can't register that many keys together (or has ghosting).",
+                    );
+                ui.add_space(6.0);
                 // recent keys as fading chips
                 for (name, t) in self.log.iter().take(6) {
                     let age = now - t;
