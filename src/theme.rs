@@ -506,29 +506,39 @@ fn draw_petal(p: &egui::Painter, c: Pos2, size: f32, rot: f32, squash: f32) {
 pub struct Mascot {
     msg: String,
     msg_since: f32,
+    /// The message asked for during this frame. Several parts of a page may call `say`;
+    /// the last one wins, and it's applied once per frame so the bubble never flickers.
+    next: Option<String>,
     happy_until: f32,
     now: f32,
 }
 
 impl Mascot {
     pub fn new() -> Self {
-        Self { msg: "Hi! Let's check your hardware~ ♪".into(), msg_since: 0.0, happy_until: 1.5, now: 0.0 }
+        Self { msg: "Hi! Let's check your hardware~ ♪".into(), msg_since: 0.0, next: None, happy_until: 1.5, now: 0.0 }
     }
 
     pub fn say(&mut self, msg: impl Into<String>) {
-        let m = msg.into();
-        if m != self.msg {
-            self.msg = m;
-            self.msg_since = self.now;
-        }
+        self.next = Some(msg.into());
     }
 
     pub fn cheer(&mut self) {
         self.happy_until = self.now + 0.6;
     }
 
+    /// Show the message chosen last frame; restart the typing animation only if it changed.
+    fn apply_next(&mut self, now: f32) {
+        if let Some(m) = self.next.take() {
+            if m != self.msg {
+                self.msg = m;
+                self.msg_since = now;
+            }
+        }
+    }
+
     pub fn ui(&mut self, ui: &mut Ui) {
         self.now = ui.input(|i| i.time as f32);
+        self.apply_next(self.now);
         let t = self.now;
         // Bubble sizes itself to the message and shrinks (or hides) when space is tight.
         let font = FontId::proportional(13.0);
@@ -603,5 +613,38 @@ impl Mascot {
         p.line_segment([m + Vec2::new(-2.0, 1.5), m + Vec2::new(0.0, -0.5)], s);
         p.line_segment([m + Vec2::new(0.0, -0.5), m + Vec2::new(2.0, 1.5)], s);
         p.line_segment([m + Vec2::new(2.0, 1.5), m + Vec2::new(4.0, -1.0)], s);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Mascot;
+
+    /// The Audio tab bug: the speaker test and the mic test both call `say` every frame.
+    /// The bubble must settle on one message instead of restarting its typing each frame.
+    #[test]
+    fn two_speakers_per_frame_do_not_flicker() {
+        let mut m = Mascot::new();
+        for frame in 0..120 {
+            m.say("Turn your volume down a bit first, ne~");
+            m.say("Talk, clap or snap your fingers~ ♪");
+            m.apply_next(frame as f32 / 60.0);
+        }
+        assert_eq!(m.msg, "Talk, clap or snap your fingers~ ♪");
+        // Typing started on the first frame and was never restarted.
+        assert_eq!(m.msg_since, 0.0);
+    }
+
+    #[test]
+    fn a_new_message_restarts_typing_once() {
+        let mut m = Mascot::new();
+        m.say("A");
+        m.apply_next(1.0);
+        m.say("B");
+        m.apply_next(2.0);
+        m.say("B");
+        m.apply_next(3.0);
+        assert_eq!(m.msg, "B");
+        assert_eq!(m.msg_since, 2.0);
     }
 }
