@@ -1,5 +1,6 @@
 //! Manga-style sound-effect pop-ups ("ドン!", "バン!") that burst out of pressed keys.
 
+use crate::sfx_audio::SfxSound;
 use crate::theme::{self, alpha, INK};
 use eframe::egui::{self, epaint::{Mesh, TextShape}, Align2, Color32, Key, Pos2, Rect, Shape, Stroke, Vec2};
 use std::f32::consts::TAU;
@@ -50,6 +51,23 @@ fn word_for(key: Key, roll: f32) -> (Word, bool) {
     }
 }
 
+/// The sound that goes with each pop-up word.
+fn sound_for(key: Key, roll: f32) -> SfxSound {
+    use Key::*;
+    match key {
+        Space => SfxSound::Boom,
+        Enter | F35 => SfxSound::Chime,
+        Backspace | Delete => SfxSound::Zap,
+        Escape => SfxSound::Flee,
+        ShiftLeft | ShiftRight | ControlLeft | ControlRight | AltLeft | AltRight | Tab => SfxSound::Whoosh,
+        SuperLeft | SuperRight => SfxSound::Chord,
+        CapsLock => SfxSound::Shout,
+        ArrowUp | ArrowDown | ArrowLeft | ArrowRight => SfxSound::Zip,
+        F1 | F2 | F3 | F4 | F5 | F6 | F7 | F8 | F9 | F10 | F11 | F12 => SfxSound::PowerUp,
+        _ => SfxSound::Pop { pitch: 0.8 + roll * 0.45 },
+    }
+}
+
 struct Pop {
     word: Word,
     center: Pos2,
@@ -65,11 +83,13 @@ pub struct Sfx {
     pops: Vec<Pop>,
     rng: u32,
     pub enabled: bool,
+    /// Sounds triggered this frame, collected by the app and sent to the audio engine.
+    pub sounds: Vec<SfxSound>,
 }
 
 impl Default for Sfx {
     fn default() -> Self {
-        Self { pops: vec![], rng: 0x5EED_1234, enabled: true }
+        Self { pops: vec![], rng: 0x5EED_1234, enabled: true, sounds: vec![] }
     }
 }
 
@@ -90,6 +110,8 @@ impl Sfx {
         }
         let roll = self.rand();
         let (word, big) = word_for(key, roll);
+        let pitch_roll = self.rand();
+        self.sounds.push(sound_for(key, pitch_roll));
         let mut jitter = [0.0; 28];
         for j in jitter.iter_mut() {
             *j = self.rand();

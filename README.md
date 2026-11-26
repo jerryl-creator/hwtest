@@ -11,7 +11,7 @@
 **⌨ Keyboard**
 - Full-size Windows layout (104 keys), including the numpad, with left/right Shift, Ctrl, Alt and Win shown separately
 - Keys turn silver once they work and glow white while held; a progress bar counts tested keys
-- Manga sound-effect pop-ups on every key press (ドーン!! for Space, 決定! for Enter, …), which you can turn off with the SFX button
+- Manga sound effects on every key press: a pop-up word (ドーン!! for Space, 決定! for Enter, …) plus a matching sound (a boom, a chime, a zap, …). Turn both off with the SFX button
 
 **★ Dead pixels**
 - Fullscreen black, white, red, green, blue, cyan, magenta, yellow and gray

@@ -185,6 +185,11 @@ fn pretty(key: Key) -> String {
 }
 
 impl KeyboardTest {
+    /// Sound effects triggered since the last call (empty when SFX is off).
+    pub fn take_sounds(&mut self) -> Vec<crate::sfx_audio::SfxSound> {
+        std::mem::take(&mut self.sfx.sounds)
+    }
+
     fn rand(&mut self) -> f32 {
         self.rng ^= self.rng << 13;
         self.rng ^= self.rng >> 17;
@@ -257,7 +262,7 @@ impl KeyboardTest {
                     let label = if self.sfx.enabled { "★ SFX: ON" } else { "SFX: OFF" };
                     let (c1, c2) = if self.sfx.enabled { (theme::ACCENT, theme::SILVER) } else { (theme::STEEL, Color32::from_rgb(60, 60, 64)) };
                     if theme::fancy_button(ui, label, Vec2::new(108.0, 32.0), c1, c2, true)
-                        .on_hover_text("Anime sound-effect pop-ups when you press keys")
+                        .on_hover_text("Anime sound effects (pop-ups and sounds) when you press keys")
                         .clicked()
                     {
                         self.sfx.enabled = !self.sfx.enabled;

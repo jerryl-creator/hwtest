@@ -1,3 +1,4 @@
+use crate::sfx_audio::{self, SfxSound, Voice};
 use crate::theme::{self, alpha, lerp_color, Mascot};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, Vec2};
@@ -37,6 +38,8 @@ struct Shared {
     elapsed: f32,
     rng: u32,
     current_freq: f32,
+    /// Sound-effect voices currently playing (key-press SFX), mixed on top of the test tone.
+    voices: Vec<Voice>,
 }
 
 pub struct SpeakerTest {
@@ -74,6 +77,7 @@ impl SpeakerTest {
             elapsed: 0.0,
             rng: 0x1234_5678,
             current_freq: 440.0,
+            voices: Vec::with_capacity(32),
         }));
         let mut me = Self { shared, _stream: None, channels: 0, sample_rate: 0, device_name: String::new(), error: None };
         if let Err(e) = me.open() {
@@ -115,8 +119,13 @@ impl SpeakerTest {
                         };
                         for frame in data.chunks_mut(channels) {
                             let v = next_sample(&mut s, sr);
+                            let fx = sfx_audio::mix(&mut s.voices, 1.0 / sr);
                             for (c, out) in frame.iter_mut().enumerate() {
-                                let x = if s.live.get(c).copied().unwrap_or(false) { v } else { 0.0 };
+                                let mut x = if s.live.get(c).copied().unwrap_or(false) { v } else { 0.0 };
+                                // Sound effects play on the front left/right (or mono) speakers.
+                                if fx != 0.0 && c < 2 {
+                                    x = (x + fx).clamp(-1.0, 1.0);
+                                }
                                 *out = <$t as cpal::FromSample<f32>>::from_sample_(x);
                             }
                         }
@@ -138,6 +147,21 @@ impl SpeakerTest {
         stream.play().map_err(|e| e.to_string())?;
         self._stream = Some(stream);
         Ok(())
+    }
+
+    /// Play a key-press sound effect (no-op if there's no audio device).
+    pub fn play_sfx(&self, sound: SfxSound) {
+        if self._stream.is_none() {
+            return;
+        }
+        if let Ok(mut s) = self.shared.lock() {
+            // Keep it light: drop the oldest voices if many keys are mashed at once.
+            let new = sfx_audio::voices_for(sound);
+            let len = s.voices.len();
+            let excess = (len + new.len()).saturating_sub(24).min(len);
+            s.voices.drain(..excess);
+            s.voices.extend(new);
+        }
     }
 
     pub fn stop(&mut self) {

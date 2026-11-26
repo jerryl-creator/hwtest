@@ -3,6 +3,7 @@
 mod keyboard;
 mod pixels;
 mod sfx;
+mod sfx_audio;
 mod speakers;
 mod theme;
 
@@ -163,6 +164,9 @@ impl eframe::App for App {
                     Tab::Speakers => self.speakers.ui(ui, &mut self.mascot, self.cjk),
                 });
             });
+        for sound in self.keyboard.take_sounds() {
+            self.speakers.play_sfx(sound);
+        }
         pace_frames(ctx);
     }
 }
