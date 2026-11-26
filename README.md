@@ -1,6 +1,7 @@
 <p align="center"><img src="assets/icon-128.png" width="96" alt="HW Test logo"></p>
 
 <h1 align="center">HW Test</h1>
+<p align="center"><a href="https://github.com/jerryl-creator/hwtest/actions/workflows/build-windows.yml"><img src="https://github.com/jerryl-creator/hwtest/actions/workflows/build-windows.yml/badge.svg" alt="Build Windows exe"></a></p>
 <p align="center">A small, anime-styled hardware tester for <b>keyboards</b>, <b>dead pixels</b> and <b>speakers</b>.<br>Written in Rust with <a href="https://github.com/emilk/egui">egui</a>. Runs on Windows 10/11 and Linux.</p>
 
 ![HW Test keyboard tab](docs/screenshot.png)
@@ -28,17 +29,79 @@ Windows may show a SmartScreen warning because the file isn't code-signed: choos
 
 ## Building
 
-Linux (needs a Rust toolchain and ALSA headers):
+### 1. Install Rust with rustup (required)
+
+HW Test is built with **rustup**, the official Rust installer. Use it even if your Linux distro has its own
+`rust` package: only rustup can add the Windows target needed to build `hwtest.exe`.
+
+**Linux / macOS**
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Then open a new terminal (or run `source "$HOME/.cargo/env"`). On Arch you can use `sudo pacman -S rustup` instead,
+then run `rustup default stable`.
+
+**Windows**
+
+Download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs). If it asks, let it install the
+Visual Studio C++ Build Tools: Rust needs them on Windows.
+
+Check that it worked:
+
+```bash
+rustc --version
+cargo --version
+```
+
+### 2. Build for Linux
+
+Install the ALSA development headers (used for sound):
+
+| Distro | Command |
+|---|---|
+| Arch | `sudo pacman -S alsa-lib` |
+| Debian / Ubuntu | `sudo apt install libasound2-dev pkg-config` |
+| Fedora | `sudo dnf install alsa-lib-devel` |
 
 ```bash
 cargo build --release
 ./target/release/hwtest
 ```
 
-Windows `.exe`, cross-compiled from Linux (needs `rustup` with the `x86_64-pc-windows-gnu` target and `mingw-w64-gcc`):
+### 3. Build the Windows `.exe` from Linux
+
+Add the Windows target and install the MinGW-w64 cross compiler:
 
 ```bash
-./build-windows.sh
+rustup target add x86_64-pc-windows-gnu
+```
+
+| Distro | Command |
+|---|---|
+| Arch | `sudo pacman -S mingw-w64-gcc` |
+| Debian / Ubuntu | `sudo apt install gcc-mingw-w64-x86-64` |
+| Fedora | `sudo dnf install mingw64-gcc` |
+
+```bash
+./build-windows.sh        # writes dist/hwtest.exe
+```
+
+The script checks for rustup, the Windows target and MinGW first, and tells you how to install anything that's missing.
+
+On Windows itself, `cargo build --release` should also work and writes `target\release\hwtest.exe`
+(this route isn't covered by CI).
+
+### Automatic builds (GitHub Actions)
+
+[`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml) runs `build-windows.sh` on every push and
+pull request. Download the result from the run's **Artifacts** section (`hwtest-windows`).
+Pushing a version tag also attaches `hwtest.exe` to that release:
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 ## Graphics compatibility

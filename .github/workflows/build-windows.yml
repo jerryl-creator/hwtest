@@ -1,0 +1,70 @@
+name: Build Windows exe
+
+# Every push and pull request: build hwtest.exe and keep it as a downloadable artifact.
+# Pushing a version tag (e.g. v1.1.0): also attach hwtest.exe to that GitHub release.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Cross-compile for Windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (rustup) with the Windows target
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-gnu
+          rustup default stable
+
+      - name: Install the MinGW-w64 cross compiler
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
+
+      - name: Cache Cargo downloads and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-gnu-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-gnu-
+
+      - name: Build
+        run: ./build-windows.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hwtest-windows
+          path: dist/hwtest.exe
+          if-no-files-found: error
+
+  release:
+    name: Attach to release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: hwtest-windows
+          path: dist
+
+      - name: Create the release if needed and upload hwtest.exe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "HW Test $TAG" --generate-notes --verify-tag
+          gh release upload "$TAG" dist/hwtest.exe --clobber
