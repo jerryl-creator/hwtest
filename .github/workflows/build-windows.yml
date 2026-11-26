@@ -1,9 +1,11 @@
 name: Build Windows exe
 
-# Every push and pull request: build the Windows exes and keep them as downloadable artifacts:
-#   nyanspect.exe        x64 (Intel and AMD), cross-compiled on Linux like build-windows.sh
-#   nyanspect-arm64.exe  ARM64 (Snapdragon / Windows on ARM), built natively on Windows 11 ARM
-# Pushing a version tag (e.g. v1.2.0): also attach both to that GitHub release.
+# Every push and pull request: build Nyanspect and keep the results as downloadable artifacts:
+#   nyanspect.exe                    Windows x64 (Intel and AMD), cross-compiled on Linux like build-windows.sh
+#   nyanspect-arm64.exe              Windows ARM64 (Snapdragon / Windows on ARM), built natively on Windows 11 ARM
+#   nyanspect-linux-x86_64.tar.gz    Linux x86_64, built on Ubuntu 22.04 so it runs on that and anything newer
+# Pushing a version tag (e.g. v1.4.0): also attach all three to that GitHub release.
+# (The workflow keeps its original file name so the README badge and run history stay put.)
 on:
   push:
     branches: [main]
@@ -100,21 +102,58 @@ jobs:
           path: dist/nyanspect-arm64.exe
           if-no-files-found: error
 
+  build-linux:
+    name: Linux x86_64
+    # The oldest supported Ubuntu: a binary built against an older glibc runs on newer distros too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (rustup)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Install ALSA development headers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+
+      - name: Cache Cargo downloads and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-x86_64-${{ hashFiles('Cargo.lock') }}
+          restore-keys: linux-x86_64-
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Build and package
+        run: ./package-linux.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nyanspect-linux
+          path: dist/nyanspect-linux-x86_64.tar.gz
+          if-no-files-found: error
+
   release:
     name: Attach to release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, build-arm64]
+    needs: [build, build-arm64, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: nyanspect-windows*
+          pattern: nyanspect-*
           path: dist
           merge-multiple: true
 
-      - name: Create the release if needed and upload the exes
+      - name: Create the release if needed and upload the downloads
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -122,4 +161,4 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "Nyanspect $TAG" --generate-notes --verify-tag
-          gh release upload "$TAG" dist/nyanspect.exe dist/nyanspect-arm64.exe --clobber
+          gh release upload "$TAG" dist/nyanspect.exe dist/nyanspect-arm64.exe dist/nyanspect-linux-x86_64.tar.gz --clobber

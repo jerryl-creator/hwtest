@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Nyanspect
+GenericName=Hardware Tester
+Comment=Test your keyboard, dead pixels and speakers
+Exec=@BIN@
+Icon=nyanspect
+Terminal=false
+Categories=Utility;
+StartupWMClass=nyanspect

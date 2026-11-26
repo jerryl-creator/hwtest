@@ -24,24 +24,38 @@
 
 ## Download
 
-Windows builds are attached to the [Releases](../../releases) page. **Nothing to install**: no Rust, no runtime,
-no installer. Download one file and double-click it.
+Ready-made builds are attached to the [Releases](../../releases) page. **No Rust or other tools needed**:
+download the file for your system and run it. Nyanspect supports Windows 10/11 and Linux; macOS isn't supported.
 
-| Your PC | Download |
+| Your system | Download |
 |---|---|
-| Intel or AMD processor (most PCs) | `nyanspect.exe` |
-| Snapdragon / ARM processor (Windows on ARM, e.g. Snapdragon X laptops) | `nyanspect-arm64.exe` |
+| Windows, Intel or AMD processor (most PCs) | `nyanspect.exe` |
+| Windows, Snapdragon / ARM processor (e.g. Snapdragon X laptops) | `nyanspect-arm64.exe` |
+| Linux, 64-bit Intel or AMD (x86_64) | `nyanspect-linux-x86_64.tar.gz` |
 
-Not sure? Open **Settings → System → About** and check *System type*: "x64-based" means `nyanspect.exe`, "ARM-based" means `nyanspect-arm64.exe`.
+### Windows
+
+Double-click the `.exe`; there's no installer. Not sure which one? Open **Settings → System → About** and check
+*System type*: "x64-based" means `nyanspect.exe`, "ARM-based" means `nyanspect-arm64.exe`.
 Windows may show a SmartScreen warning because the file isn't code-signed: choose **More info → Run anyway**.
 
-Nyanspect supports **Windows 10/11 and Linux**; macOS isn't supported. There's no ready-made Linux download yet,
-so on Linux [build it from source](#building-from-source-developers-only).
+### Linux
+
+```bash
+tar -xzf nyanspect-linux-x86_64.tar.gz
+cd nyanspect
+./install.sh          # adds Nyanspect to your app menu (no sudo needed)
+```
+
+Or skip installing and run `./nyanspect` straight from the folder. To remove it later: `./install.sh --uninstall`.
+
+It runs on Ubuntu 22.04 or newer, Debian 12+, Fedora, Arch and most other current distros, with Wayland or X11.
+It needs the ALSA sound library (`libasound`), which desktop systems already have.
 
 ## Building from source (developers only)
 
-> **Just want to use Nyanspect on Windows?** You don't need anything in this section: download the `.exe` above.
-> Rust is only needed to build Nyanspect yourself, for example to change the code or to run it on Linux.
+> **Just want to use Nyanspect?** You don't need anything in this section: grab a ready-made download above.
+> Rust is only needed to build Nyanspect yourself, for example to change the code.
 
 ### 1. Install Rust with rustup
 
@@ -84,6 +98,8 @@ cargo build --release
 ./target/release/nyanspect
 ```
 
+To make the same `.tar.gz` package as the releases: `./package-linux.sh` (writes `dist/nyanspect-linux-x86_64.tar.gz`).
+
 ### 3. Build the Windows `.exe` from Linux
 
 Add the Windows target and install the MinGW-w64 cross compiler:
@@ -109,10 +125,11 @@ On Windows itself, `cargo build --release` should also work and writes `target\r
 
 ### Automatic builds (GitHub Actions)
 
-[`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml) builds both Windows versions on every push and
-pull request: x64 by running `build-windows.sh` on Linux, and ARM64 natively on a Windows 11 ARM machine.
-Download them from the run's **Artifacts** section (`nyanspect-windows` and `nyanspect-windows-arm64`).
-Pushing a version tag also attaches both exes to that release:
+[`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml) builds all three downloads on every push and
+pull request: Windows x64 by running `build-windows.sh` on Linux, Windows ARM64 natively on a Windows 11 ARM machine,
+and Linux by running the tests and `package-linux.sh` on Ubuntu 22.04.
+Download them from the run's **Artifacts** section (`nyanspect-windows`, `nyanspect-windows-arm64`, `nyanspect-linux`).
+Pushing a version tag also attaches all three to that release:
 
 ```bash
 git tag v1.1.0
