@@ -85,15 +85,26 @@ fn pretty(key: Key) -> String {
 }
 
 impl KeyboardTest {
-    /// Default layout, or the one named in NYANSPECT_LAYOUT (dev/screenshots), e.g. "tkl-iso".
-    pub fn from_env() -> Self {
-        let mut kb = Self::default();
+    pub fn load_settings(&mut self, s: &crate::settings::Settings) {
+        self.size = s.kb_size;
+        self.style = s.kb_style;
+        self.sfx.enabled = s.sfx;
+        self.layout = layouts::build(self.size, self.style);
+    }
+
+    pub fn store_settings(&self, s: &mut crate::settings::Settings) {
+        s.kb_size = self.size;
+        s.kb_style = self.style;
+        s.sfx = self.sfx.enabled;
+    }
+
+    /// Dev/screenshots: NYANSPECT_LAYOUT picks the layout, e.g. "tkl-iso".
+    pub fn apply_env_layout(&mut self) {
         if let Ok(v) = std::env::var("NYANSPECT_LAYOUT") {
-            kb.size = if v.contains("tkl") { Size::Tkl } else if v.contains("compact") { Size::Compact } else { Size::Full };
-            kb.style = if v.contains("iso") { Style::Iso } else { Style::Ansi };
-            kb.layout = layouts::build(kb.size, kb.style);
+            self.size = if v.contains("tkl") { Size::Tkl } else if v.contains("compact") { Size::Compact } else { Size::Full };
+            self.style = if v.contains("iso") { Style::Iso } else { Style::Ansi };
+            self.layout = layouts::build(self.size, self.style);
         }
-        kb
     }
 
     /// Sound effects triggered since the last call (empty when SFX is off).

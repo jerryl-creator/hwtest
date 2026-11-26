@@ -39,6 +39,16 @@ impl Default for PixelTest {
 }
 
 impl PixelTest {
+    pub fn load_settings(&mut self, s: &crate::settings::Settings) {
+        self.auto_cycle = s.auto_cycle;
+        self.cycle_secs = s.cycle_secs.clamp(0.5, 10.0);
+    }
+
+    pub fn store_settings(&self, s: &mut crate::settings::Settings) {
+        s.auto_cycle = self.auto_cycle;
+        s.cycle_secs = self.cycle_secs;
+    }
+
     pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, cjk: bool) {
         mascot.say("Look closely for dots that don't match~ (◎_◎)");
         let t = ui.input(|i| i.time as f32);

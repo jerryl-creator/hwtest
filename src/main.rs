@@ -4,6 +4,7 @@ mod chatter;
 mod keyboard;
 mod layouts;
 mod pixels;
+mod settings;
 mod sfx;
 mod sfx_audio;
 mod speakers;
@@ -43,15 +44,26 @@ impl App {
         if std::env::var("NYANSPECT_LIGHT").is_ok() {
             cc.egui_ctx.set_theme(egui::Theme::Light);
         }
-        Self {
+        let mut app = Self {
             tab: Tab::Keyboard,
             cjk,
             bg: theme::Background::new(),
             mascot: theme::Mascot::new(),
-            keyboard: keyboard::KeyboardTest::from_env(),
+            keyboard: keyboard::KeyboardTest::default(),
             pixels: pixels::PixelTest::default(),
             speakers: speakers::SpeakerTest::new(),
-        }
+        };
+        // Restore remembered settings (skipped for dev screenshots so they're reproducible).
+        let saved = cc
+            .storage
+            .filter(|_| std::env::var("NYANSPECT_SHOT").is_err())
+            .and_then(|st| eframe::get_value::<settings::Settings>(st, settings::KEY))
+            .unwrap_or_default();
+        app.keyboard.load_settings(&saved);
+        app.pixels.load_settings(&saved);
+        app.speakers.load_settings(&saved);
+        app.keyboard.apply_env_layout();
+        app
     }
 
     fn header(&mut self, ui: &mut egui::Ui) {
@@ -144,6 +156,14 @@ impl eframe::App for App {
                 }
             }
         }
+    }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        let mut s = settings::Settings::default();
+        self.keyboard.store_settings(&mut s);
+        self.pixels.store_settings(&mut s);
+        self.speakers.store_settings(&mut s);
+        eframe::set_value(storage, settings::KEY, &s);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -347,6 +367,12 @@ fn fatal(msg: &str) {
 fn dev_screenshot(ctx: &egui::Context, tab: &mut Tab) {
     if let Ok(t) = std::env::var("NYANSPECT_TAB") {
         *tab = TABS[t.parse::<usize>().unwrap_or(0).min(2)].0;
+    }
+    // NYANSPECT_QUIT_AT=<seconds>: close normally (settings get saved) after that long.
+    if let Some(q) = std::env::var("NYANSPECT_QUIT_AT").ok().and_then(|v| v.parse::<f64>().ok()) {
+        if ctx.input(|i| i.time) > q {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
     }
     let Ok(path) = std::env::var("NYANSPECT_SHOT") else { return };
     let time = ctx.input(|i| i.time);

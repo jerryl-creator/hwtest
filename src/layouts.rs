@@ -12,7 +12,7 @@ pub struct Cap {
     pub h: f32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Size {
     /// 104/105 keys, with numpad
     Full,
@@ -22,7 +22,7 @@ pub enum Size {
     Compact,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Style {
     /// US: wide Enter, long left Shift
     Ansi,

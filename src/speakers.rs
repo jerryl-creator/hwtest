@@ -5,7 +5,7 @@ use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use std::f32::consts::TAU;
 use std::sync::{Arc, Mutex};
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Wave {
     Sine,
     Square,
@@ -147,6 +147,24 @@ impl SpeakerTest {
         stream.play().map_err(|e| e.to_string())?;
         self._stream = Some(stream);
         Ok(())
+    }
+
+    pub fn load_settings(&mut self, s: &crate::settings::Settings) {
+        if let Ok(mut sh) = self.shared.lock() {
+            sh.volume = s.volume.clamp(0.0, 1.0);
+            sh.freq = s.freq.clamp(20.0, 20_000.0);
+            sh.wave = s.wave;
+            sh.sweep_secs = s.sweep_secs.clamp(3.0, 30.0);
+        }
+    }
+
+    pub fn store_settings(&self, s: &mut crate::settings::Settings) {
+        if let Ok(sh) = self.shared.lock() {
+            s.volume = sh.volume;
+            s.freq = sh.freq;
+            s.wave = sh.wave;
+            s.sweep_secs = sh.sweep_secs;
+        }
     }
 
     /// Play a key-press sound effect (no-op if there's no audio device).
