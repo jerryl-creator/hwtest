@@ -1,7 +1,9 @@
 name: Build Windows exe
 
-# Every push and pull request: build hwtest.exe and keep it as a downloadable artifact.
-# Pushing a version tag (e.g. v1.1.0): also attach hwtest.exe to that GitHub release.
+# Every push and pull request: build the Windows exes and keep them as downloadable artifacts:
+#   hwtest.exe        x64 (Intel and AMD), cross-compiled on Linux like build-windows.sh
+#   hwtest-arm64.exe  ARM64 (Snapdragon / Windows on ARM), built natively on Windows 11 ARM
+# Pushing a version tag (e.g. v1.2.0): also attach both to that GitHub release.
 on:
   push:
     branches: [main]
@@ -17,7 +19,7 @@ permissions:
 
 jobs:
   build:
-    name: Cross-compile for Windows
+    name: Windows x64 (cross-compiled)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,20 +51,70 @@ jobs:
           path: dist/hwtest.exe
           if-no-files-found: error
 
+  build-arm64:
+    name: Windows ARM64 (native)
+    runs-on: windows-11-arm
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      TARGET: aarch64-pc-windows-msvc
+      # Link the C runtime statically, so the exe doesn't need the VC++ redistributable.
+      CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
+      CARGO_PROFILE_RELEASE_STRIP: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (rustup)
+        run: |
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            Invoke-WebRequest https://static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe -OutFile rustup-init.exe
+            ./rustup-init.exe -y --default-toolchain none --profile minimal
+            Remove-Item rustup-init.exe
+            "$env:USERPROFILE\.cargo\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+            $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+          }
+          rustup toolchain install stable --profile minimal --target $env:TARGET
+          rustup default stable
+          rustc --version --verbose
+
+      - name: Cache Cargo downloads and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-arm64-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-arm64-
+
+      - name: Build
+        run: |
+          cargo build --release --locked --target $env:TARGET
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "target/$env:TARGET/release/hwtest.exe" dist/hwtest-arm64.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hwtest-windows-arm64
+          path: dist/hwtest-arm64.exe
+          if-no-files-found: error
+
   release:
     name: Attach to release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, build-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: hwtest-windows
+          pattern: hwtest-windows*
           path: dist
+          merge-multiple: true
 
-      - name: Create the release if needed and upload hwtest.exe
+      - name: Create the release if needed and upload the exes
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -70,4 +122,4 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "HW Test $TAG" --generate-notes --verify-tag
-          gh release upload "$TAG" dist/hwtest.exe --clobber
+          gh release upload "$TAG" dist/hwtest.exe dist/hwtest-arm64.exe --clobber

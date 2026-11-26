@@ -24,7 +24,14 @@
 
 ## Download
 
-Windows builds are attached to the [Releases](../../releases) page: a single `hwtest.exe`, no installer needed.
+Windows builds are attached to the [Releases](../../releases) page. Each is a single file with no installer:
+
+| Your PC | Download |
+|---|---|
+| Intel or AMD processor (most PCs) | `hwtest.exe` |
+| Snapdragon / ARM processor (Windows on ARM, e.g. Snapdragon X laptops) | `hwtest-arm64.exe` |
+
+Not sure? Open **Settings → System → About** and check *System type*: "x64-based" means `hwtest.exe`, "ARM-based" means `hwtest-arm64.exe`.
 Windows may show a SmartScreen warning because the file isn't code-signed: choose **More info → Run anyway**.
 
 ## Building
@@ -97,9 +104,10 @@ On Windows itself, `cargo build --release` should also work and writes `target\r
 
 ### Automatic builds (GitHub Actions)
 
-[`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml) runs `build-windows.sh` on every push and
-pull request. Download the result from the run's **Artifacts** section (`hwtest-windows`).
-Pushing a version tag also attaches `hwtest.exe` to that release:
+[`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml) builds both Windows versions on every push and
+pull request: x64 by running `build-windows.sh` on Linux, and ARM64 natively on a Windows 11 ARM machine.
+Download them from the run's **Artifacts** section (`hwtest-windows` and `hwtest-windows-arm64`).
+Pushing a version tag also attaches both exes to that release:
 
 ```bash
 git tag v1.1.0
