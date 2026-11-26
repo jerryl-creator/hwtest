@@ -3,6 +3,7 @@
 mod chatter;
 mod keyboard;
 mod layouts;
+mod mic;
 mod pixels;
 mod settings;
 mod sfx;
@@ -35,6 +36,7 @@ struct App {
     keyboard: keyboard::KeyboardTest,
     pixels: pixels::PixelTest,
     speakers: speakers::SpeakerTest,
+    mic: mic::MicTest,
 }
 
 impl App {
@@ -52,6 +54,7 @@ impl App {
             keyboard: keyboard::KeyboardTest::default(),
             pixels: pixels::PixelTest::default(),
             speakers: speakers::SpeakerTest::new(),
+            mic: mic::MicTest::default(),
         };
         // Restore remembered settings (skipped for dev screenshots so they're reproducible).
         let saved = cc
@@ -200,6 +203,8 @@ impl eframe::App for App {
 
         if self.tab != Tab::Audio {
             self.speakers.stop();
+            // Privacy: the microphone is only ever open while the Audio tab is showing.
+            self.mic.stop();
         }
 
         egui::CentralPanel::default()
@@ -213,7 +218,11 @@ impl eframe::App for App {
                 egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| match self.tab {
                     Tab::Keyboard => self.keyboard.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Display => self.pixels.ui(ui, &mut self.mascot, self.cjk),
-                    Tab::Audio => self.speakers.ui(ui, &mut self.mascot, self.cjk),
+                    Tab::Audio => {
+                        self.speakers.ui(ui, &mut self.mascot, self.cjk);
+                        ui.add_space(14.0);
+                        self.mic.ui(ui, &mut self.mascot, self.cjk, &self.speakers);
+                    }
                 });
             });
         for sound in self.keyboard.take_sounds() {

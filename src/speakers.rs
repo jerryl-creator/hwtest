@@ -40,9 +40,16 @@ struct Shared {
     current_freq: f32,
     /// Sound-effect voices currently playing (key-press SFX), mixed on top of the test tone.
     voices: Vec<Voice>,
+    /// A recorded clip being played back (mic test), already at the output sample rate.
+    clip: Vec<f32>,
+    clip_pos: usize,
 }
 
 pub struct SpeakerTest {
+    /// Per channel: did the user hear it? (None = not answered yet)
+    pub heard: Vec<Option<bool>>,
+    /// Per channel: has it been played at least once?
+    played: Vec<bool>,
     shared: Arc<Mutex<Shared>>,
     _stream: Option<cpal::Stream>,
     channels: usize,
@@ -78,8 +85,10 @@ impl SpeakerTest {
             rng: 0x1234_5678,
             current_freq: 440.0,
             voices: Vec::with_capacity(32),
+            clip: Vec::new(),
+            clip_pos: 0,
         }));
-        let mut me = Self { shared, _stream: None, channels: 0, sample_rate: 0, device_name: String::new(), error: None };
+        let mut me = Self { heard: vec![], played: vec![], shared, _stream: None, channels: 0, sample_rate: 0, device_name: String::new(), error: None };
         if let Err(e) = me.open() {
             me.error = Some(e);
         }
@@ -96,6 +105,8 @@ impl SpeakerTest {
         let config = device.default_output_config().map_err(|e| e.to_string())?;
         let stream_config: cpal::StreamConfig = config.clone().into();
         self.channels = stream_config.channels as usize;
+        self.heard = vec![None; self.channels];
+        self.played = vec![false; self.channels];
         self.sample_rate = stream_config.sample_rate;
         {
             let mut s = self.shared.lock().unwrap();
@@ -119,7 +130,11 @@ impl SpeakerTest {
                         };
                         for frame in data.chunks_mut(channels) {
                             let v = next_sample(&mut s, sr);
-                            let fx = sfx_audio::mix(&mut s.voices, 1.0 / sr);
+                            let mut fx = sfx_audio::mix(&mut s.voices, 1.0 / sr);
+                            if s.clip_pos < s.clip.len() {
+                                fx += s.clip[s.clip_pos];
+                                s.clip_pos += 1;
+                            }
                             for (c, out) in frame.iter_mut().enumerate() {
                                 let mut x = if s.live.get(c).copied().unwrap_or(false) { v } else { 0.0 };
                                 // Sound effects play on the front left/right (or mono) speakers.
@@ -182,6 +197,30 @@ impl SpeakerTest {
         }
     }
 
+    /// Play a mono clip (e.g. a mic recording) recorded at `rate` Hz on the front speakers.
+    pub fn play_clip(&self, samples: &[f32], rate: u32) {
+        if self._stream.is_none() || samples.is_empty() || rate == 0 {
+            return;
+        }
+        let clip = resample(samples, rate, self.sample_rate);
+        if let Ok(mut s) = self.shared.lock() {
+            s.clip = clip;
+            s.clip_pos = 0;
+        }
+    }
+
+    pub fn clip_playing(&self) -> bool {
+        self.shared.lock().map(|s| s.clip_pos < s.clip.len()).unwrap_or(false)
+    }
+
+    pub fn channel_names(&self) -> Vec<String> {
+        (0..self.channels).map(|c| channel_name(c, self.channels)).collect()
+    }
+
+    pub fn device(&self) -> Option<&str> {
+        self.error.is_none().then_some(self.device_name.as_str())
+    }
+
     pub fn stop(&mut self) {
         if let Ok(mut s) = self.shared.lock() {
             s.mode = Mode::Off;
@@ -237,7 +276,7 @@ impl SpeakerTest {
             let orb = 92.0;
             let spacing = 26.0;
             let row_w = n as f32 * orb + (n.saturating_sub(1)) as f32 * spacing;
-            let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), orb + 46.0), Sense::hover());
+            let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), orb + 82.0), Sense::hover());
             let start_x = area.center().x - row_w / 2.0;
             let t = ui.input(|i| i.time as f32);
             for c in 0..n {
@@ -248,11 +287,31 @@ impl SpeakerTest {
                     let mut mask = vec![false; n];
                     mask[c] = true;
                     self.start(Mode::Tone, mask);
+                    self.played[c] = true;
                 }
                 let on = playing && live.get(c).copied().unwrap_or(false);
                 let a = ui.ctx().animate_bool_with_time(resp.id.with("on"), on, 0.2);
                 let h = ui.ctx().animate_bool_with_time(resp.id.with("hov"), resp.hovered(), 0.15);
                 draw_orb(ui.painter(), center, orb / 2.0, a, h, t, &channel_name(c, n));
+
+                // Result badge and the "Heard it?" Yes/No buttons once this speaker has played.
+                if let Some(ok) = self.heard[c] {
+                    let b = center + Vec2::new(orb * 0.33, -orb * 0.33);
+                    ui.painter().circle(b, 11.0, if ok { Color32::WHITE } else { theme::STEEL }, Stroke::new(1.5, theme::INK));
+                    ui.painter().text(b, Align2::CENTER_CENTER, if ok { "✔" } else { "!" }, theme::bold(12.0), if ok { theme::INK } else { Color32::WHITE });
+                }
+                if self.played[c] {
+                    let opts = [
+                        (Some(true), "Yes", "I heard this speaker"),
+                        (Some(false), "No", "No sound (or crackling) from this speaker"),
+                    ];
+                    let r = Rect::from_center_size(Pos2::new(center.x, area.top() + orb + 58.0), Vec2::new(orb + spacing, 34.0));
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+                        let w = 86.0;
+                        ui.add_space(((r.width() - w) / 2.0).max(0.0));
+                        theme::segmented(ui, &format!("heard-{c}"), &opts, &mut self.heard[c]);
+                    });
+                }
             }
 
             ui.add_space(4.0);
@@ -262,6 +321,7 @@ impl SpeakerTest {
                 let b = Vec2::new(186.0, 42.0);
                 if theme::fancy_button(ui, "♫  All channels", b, theme::ACCENT, theme::SILVER, true).clicked() {
                     self.start(Mode::Tone, vec![true; n]);
+                    self.played.iter_mut().for_each(|p| *p = true);
                 }
                 if theme::fancy_button(ui, "⇄  Left / Right", b, theme::SILVER, theme::STEEL, n >= 2).clicked() {
                     self.start(Mode::Alternate, vec![true; n]);
@@ -423,4 +483,45 @@ fn next_sample(s: &mut Shared, sr: f32) -> f32 {
         }
     };
     raw * s.volume
+}
+
+/// Linear resampling from `from` Hz to `to` Hz.
+fn resample(samples: &[f32], from: u32, to: u32) -> Vec<f32> {
+    if samples.is_empty() || from == 0 || to == 0 {
+        return Vec::new();
+    }
+    let ratio = from as f64 / to as f64;
+    let out_len = (samples.len() as f64 / ratio) as usize;
+    (0..out_len)
+        .map(|i| {
+            let x = i as f64 * ratio;
+            let j = x as usize;
+            let f = (x - j as f64) as f32;
+            let a = samples[j.min(samples.len() - 1)];
+            let b = samples[(j + 1).min(samples.len() - 1)];
+            a + (b - a) * f
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resample;
+
+    #[test]
+    fn resample_keeps_duration_and_shape() {
+        // 1 second of a 100 Hz sine at 44.1 kHz → 48 kHz
+        let src: Vec<f32> = (0..44_100).map(|i| (i as f32 / 44_100.0 * 100.0 * std::f32::consts::TAU).sin()).collect();
+        let out = resample(&src, 44_100, 48_000);
+        assert!((out.len() as i64 - 48_000).abs() <= 1);
+        // Same instant (0.25 s) in both should have nearly the same value.
+        assert!((out[12_000] - src[11_025]).abs() < 0.01);
+        assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0 + 1e-6));
+    }
+
+    #[test]
+    fn resample_same_rate_is_identity() {
+        let src = vec![0.1, -0.2, 0.3, -0.4];
+        assert_eq!(resample(&src, 48_000, 48_000), src);
+    }
 }
