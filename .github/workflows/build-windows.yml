@@ -1,8 +1,8 @@
 name: Build Windows exe
 
 # Every push and pull request: build the Windows exes and keep them as downloadable artifacts:
-#   hwtest.exe        x64 (Intel and AMD), cross-compiled on Linux like build-windows.sh
-#   hwtest-arm64.exe  ARM64 (Snapdragon / Windows on ARM), built natively on Windows 11 ARM
+#   nyanspect.exe        x64 (Intel and AMD), cross-compiled on Linux like build-windows.sh
+#   nyanspect-arm64.exe  ARM64 (Snapdragon / Windows on ARM), built natively on Windows 11 ARM
 # Pushing a version tag (e.g. v1.2.0): also attach both to that GitHub release.
 on:
   push:
@@ -47,8 +47,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hwtest-windows
-          path: dist/hwtest.exe
+          name: nyanspect-windows
+          path: dist/nyanspect.exe
           if-no-files-found: error
 
   build-arm64:
@@ -92,12 +92,12 @@ jobs:
         run: |
           cargo build --release --locked --target $env:TARGET
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item "target/$env:TARGET/release/hwtest.exe" dist/hwtest-arm64.exe
+          Copy-Item "target/$env:TARGET/release/nyanspect.exe" dist/nyanspect-arm64.exe
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hwtest-windows-arm64
-          path: dist/hwtest-arm64.exe
+          name: nyanspect-windows-arm64
+          path: dist/nyanspect-arm64.exe
           if-no-files-found: error
 
   release:
@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: hwtest-windows*
+          pattern: nyanspect-windows*
           path: dist
           merge-multiple: true
 
@@ -121,5 +121,5 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           gh release view "$TAG" >/dev/null 2>&1 \
-            || gh release create "$TAG" --title "HW Test $TAG" --generate-notes --verify-tag
-          gh release upload "$TAG" dist/hwtest.exe dist/hwtest-arm64.exe --clobber
+            || gh release create "$TAG" --title "Nyanspect $TAG" --generate-notes --verify-tag
+          gh release upload "$TAG" dist/nyanspect.exe dist/nyanspect-arm64.exe --clobber

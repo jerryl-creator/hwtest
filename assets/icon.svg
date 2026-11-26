@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <!-- HW Test logo: a black keycap with the white manga cat, a sparkle and halftone dots -->
+  <!-- Nyanspect logo: a black keycap with the white manga cat, a sparkle and halftone dots -->
   <defs>
     <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#3a3a3f"/>

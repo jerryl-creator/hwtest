@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Cross-compile hwtest.exe for Windows (x86_64) from Linux.
-# Output: dist/hwtest.exe
+# Cross-compile nyanspect.exe for Windows (x86_64) from Linux.
+# Output: dist/nyanspect.exe
 #
 # Needs:
 #   - rustup with the stable toolchain and the x86_64-pc-windows-gnu target
@@ -62,5 +62,5 @@ export CARGO_PROFILE_RELEASE_STRIP=true
 
 "$CARGO" build --release --locked --target "$TARGET"
 mkdir -p dist
-cp "target/$TARGET/release/hwtest.exe" dist/hwtest.exe
-echo "Built: $(realpath dist/hwtest.exe)"
+cp "target/$TARGET/release/nyanspect.exe" dist/nyanspect.exe
+echo "Built: $(realpath dist/nyanspect.exe)"

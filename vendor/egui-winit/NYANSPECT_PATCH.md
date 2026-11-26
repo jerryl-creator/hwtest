@@ -3,7 +3,7 @@
 This is a copy of [egui-winit](https://github.com/emilk/egui/tree/main/crates/egui-winit) 0.37.0
 (license: MIT OR Apache-2.0), used through `[patch.crates-io]` in the top-level `Cargo.toml`.
 
-Two small changes in `src/lib.rs`, both marked `hwtest patch`:
+Two small changes in `src/lib.rs`, both marked `nyanspect patch`:
 
 1. **Numpad keys.** egui has no separate numpad keys (Numpad1 is reported as Num1, and NumpadEnter as Enter).
    The *physical* key of numpad presses is reported as F20–F35 instead, which real keyboards don't have

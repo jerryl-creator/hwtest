@@ -7,7 +7,7 @@ mod sfx_audio;
 mod speakers;
 mod theme;
 
-use eframe::egui::{self, Align2, Color32, Rect, Sense, Vec2};
+use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Vec2};
 use eframe::{egui_wgpu, wgpu};
 use theme::alpha;
 
@@ -37,8 +37,8 @@ struct App {
 impl App {
     fn new(cc: &eframe::CreationContext) -> Self {
         let cjk = theme::setup(&cc.egui_ctx);
-        // Dev check: HWTEST_LIGHT=1 flips egui to light mode (like Windows' Light theme); the app must still look the same.
-        if std::env::var("HWTEST_LIGHT").is_ok() {
+        // Dev check: NYANSPECT_LIGHT=1 flips egui to light mode (like Windows' Light theme); the app must still look the same.
+        if std::env::var("NYANSPECT_LIGHT").is_ok() {
             cc.egui_ctx.set_theme(egui::Theme::Light);
         }
         Self {
@@ -57,17 +57,17 @@ impl App {
         ui.horizontal(|ui| {
             ui.add_space(6.0);
             // Logo with glow
-            let (r, logo) = ui.allocate_exact_size(Vec2::new(150.0, 44.0), Sense::hover());
+            let (r, logo) = ui.allocate_exact_size(Vec2::new(170.0, 44.0), Sense::hover());
             if let Some(info) = RENDERER_INFO.get() {
                 logo.on_hover_text(format!("Renderer: {info}"));
             }
             let p = ui.painter();
             let t = ui.input(|i| i.time as f32);
             theme::glow(p, r.left_center() + Vec2::new(60.0, 0.0), 70.0, alpha(theme::ACCENT, 0.12 + 0.04 * (t * 2.0).sin()));
-            p.text(r.left_center() + Vec2::new(0.0, -6.0), Align2::LEFT_CENTER, "HW Test", theme::bold(26.0), Color32::WHITE);
-            let sub = if self.cjk { "ハードウェアチェック" } else { "hardware check" };
+            let title = p.text(r.left_center() + Vec2::new(0.0, -6.0), Align2::LEFT_CENTER, "Nyanspect", theme::bold(26.0), Color32::WHITE);
+            let sub = if self.cjk { "にゃんスペクト" } else { "hardware inspector" };
             p.text(r.left_center() + Vec2::new(2.0, 15.0), Align2::LEFT_CENTER, sub, egui::FontId::proportional(11.0), theme::LIGHT);
-            theme::star(p, r.left_top() + Vec2::new(112.0, 6.0 + (t * 3.0).sin() * 2.0), 6.0, theme::GLINT);
+            theme::star(p, Pos2::new(title.right() + 6.0, r.top() + 6.0 + (t * 3.0).sin() * 2.0), 6.0, theme::GLINT);
 
             ui.add_space(18.0);
             self.tab_bar(ui);
@@ -115,9 +115,9 @@ impl App {
 }
 
 impl eframe::App for App {
-    /// Dev helper: with HWTEST_DEMO set, inject a few key presses so screenshots show the effects.
+    /// Dev helper: with NYANSPECT_DEMO set, inject a few key presses so screenshots show the effects.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
-        if std::env::var("HWTEST_DEMO").is_err() {
+        if std::env::var("NYANSPECT_DEMO").is_err() {
             return;
         }
         let t = raw.time.unwrap_or(0.0);
@@ -265,14 +265,14 @@ fn run(renderer: eframe::Renderer) -> eframe::Result {
             ..Default::default()
         },
         viewport: egui::ViewportBuilder::default()
-            .with_title("HW Test")
-            .with_app_id("hwtest")
+            .with_title("Nyanspect")
+            .with_app_id("nyanspect")
             .with_inner_size([1280.0, 760.0])
             .with_min_inner_size([960.0, 600.0])
             .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon-256.png")).expect("icon")),
         ..Default::default()
     };
-    eframe::run_native("hwtest", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
+    eframe::run_native("nyanspect", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
 }
 
 fn main() {
@@ -289,7 +289,7 @@ fn main() {
     };
 
     if force_gl {
-        fatal(&format!("HW Test could not start its graphics (OpenGL).\n\n{err}"));
+        fatal(&format!("Nyanspect could not start its graphics (OpenGL).\n\n{err}"));
         return;
     }
     // The default renderer (DirectX 12 / Vulkan via wgpu) fails on some older PCs and drivers.
@@ -297,12 +297,12 @@ fn main() {
     log_error(&format!("wgpu renderer failed: {err}\nRetrying with OpenGL (--opengl)"));
     let relaunch = std::env::current_exe().and_then(|exe| std::process::Command::new(exe).arg("--opengl").status());
     if let Err(e) = relaunch {
-        fatal(&format!("HW Test could not start its graphics.\n\n{err}\n\nRetry with OpenGL failed: {e}"));
+        fatal(&format!("Nyanspect could not start its graphics.\n\n{err}\n\nRetry with OpenGL failed: {e}"));
     }
 }
 
 fn log_path() -> std::path::PathBuf {
-    std::env::temp_dir().join("hwtest-error.log")
+    std::env::temp_dir().join("nyanspect-error.log")
 }
 
 fn log_error(msg: &str) {
@@ -325,20 +325,20 @@ fn fatal(msg: &str) {
         }
         let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
         // 0x10 = MB_ICONERROR
-        unsafe { MessageBoxW(std::ptr::null_mut(), wide(&text).as_ptr(), wide("HW Test").as_ptr(), 0x10) };
+        unsafe { MessageBoxW(std::ptr::null_mut(), wide(&text).as_ptr(), wide("Nyanspect").as_ptr(), 0x10) };
     }
     #[cfg(not(windows))]
     eprintln!("{text}");
 }
 
-/// Dev helper: `HWTEST_SHOT=out.png HWTEST_TAB=0|1|2 hwtest` saves a window screenshot and exits.
+/// Dev helper: `NYANSPECT_SHOT=out.png NYANSPECT_TAB=0|1|2 nyanspect` saves a window screenshot and exits.
 fn dev_screenshot(ctx: &egui::Context, tab: &mut Tab) {
-    if let Ok(t) = std::env::var("HWTEST_TAB") {
+    if let Ok(t) = std::env::var("NYANSPECT_TAB") {
         *tab = TABS[t.parse::<usize>().unwrap_or(0).min(2)].0;
     }
-    let Ok(path) = std::env::var("HWTEST_SHOT") else { return };
+    let Ok(path) = std::env::var("NYANSPECT_SHOT") else { return };
     let time = ctx.input(|i| i.time);
-    if std::env::var("HWTEST_MAX").is_ok() && time < 0.5 {
+    if std::env::var("NYANSPECT_MAX").is_ok() && time < 0.5 {
         ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
     }
     let key = egui::Id::unique("dev-shot-sent");

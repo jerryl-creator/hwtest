@@ -1,10 +1,10 @@
-<p align="center"><img src="assets/icon-128.png" width="96" alt="HW Test logo"></p>
+<p align="center"><img src="assets/icon-128.png" width="96" alt="Nyanspect logo"></p>
 
-<h1 align="center">HW Test</h1>
-<p align="center"><a href="https://github.com/jerryl-creator/hwtest/actions/workflows/build-windows.yml"><img src="https://github.com/jerryl-creator/hwtest/actions/workflows/build-windows.yml/badge.svg" alt="Build Windows exe"></a></p>
-<p align="center">A small, anime-styled hardware tester for <b>keyboards</b>, <b>dead pixels</b> and <b>speakers</b>.<br>Written in Rust with <a href="https://github.com/emilk/egui">egui</a>. Runs on Windows 10/11 and Linux.</p>
+<h1 align="center">Nyanspect <sub>にゃんスペクト</sub></h1>
+<p align="center"><a href="https://github.com/jerryl-creator/nyanspect/actions/workflows/build-windows.yml"><img src="https://github.com/jerryl-creator/nyanspect/actions/workflows/build-windows.yml/badge.svg" alt="Build Windows exe"></a></p>
+<p align="center"><i>nyan</i> (meow) + <i>inspect</i>: a small, anime-styled hardware tester for <b>keyboards</b>, <b>dead pixels</b> and <b>speakers</b>.<br>Written in Rust with <a href="https://github.com/emilk/egui">egui</a>. Runs on Windows 10/11 and Linux.</p>
 
-![HW Test keyboard tab](docs/screenshot.png)
+![Nyanspect keyboard tab](docs/screenshot.png)
 
 ## Features
 
@@ -28,20 +28,20 @@ Windows builds are attached to the [Releases](../../releases) page. Each is a si
 
 | Your PC | Download |
 |---|---|
-| Intel or AMD processor (most PCs) | `hwtest.exe` |
-| Snapdragon / ARM processor (Windows on ARM, e.g. Snapdragon X laptops) | `hwtest-arm64.exe` |
+| Intel or AMD processor (most PCs) | `nyanspect.exe` |
+| Snapdragon / ARM processor (Windows on ARM, e.g. Snapdragon X laptops) | `nyanspect-arm64.exe` |
 
-Not sure? Open **Settings → System → About** and check *System type*: "x64-based" means `hwtest.exe`, "ARM-based" means `hwtest-arm64.exe`.
+Not sure? Open **Settings → System → About** and check *System type*: "x64-based" means `nyanspect.exe`, "ARM-based" means `nyanspect-arm64.exe`.
 Windows may show a SmartScreen warning because the file isn't code-signed: choose **More info → Run anyway**.
 
 ## Building
 
 ### 1. Install Rust with rustup (required)
 
-HW Test supports **Windows 10/11 and Linux**. macOS isn't supported or tested.
+Nyanspect supports **Windows 10/11 and Linux**. macOS isn't supported or tested.
 
-HW Test is built with **rustup**, the official Rust installer. Use it even if your Linux distro has its own
-`rust` package: only rustup can add the Windows target needed to build `hwtest.exe`.
+Nyanspect is built with **rustup**, the official Rust installer. Use it even if your Linux distro has its own
+`rust` package: only rustup can add the Windows target needed to build `nyanspect.exe`.
 
 **Linux**
 
@@ -76,7 +76,7 @@ Install the ALSA development headers (used for sound):
 
 ```bash
 cargo build --release
-./target/release/hwtest
+./target/release/nyanspect
 ```
 
 ### 3. Build the Windows `.exe` from Linux
@@ -94,19 +94,19 @@ rustup target add x86_64-pc-windows-gnu
 | Fedora | `sudo dnf install mingw64-gcc` |
 
 ```bash
-./build-windows.sh        # writes dist/hwtest.exe
+./build-windows.sh        # writes dist/nyanspect.exe
 ```
 
 The script checks for rustup, the Windows target and MinGW first, and tells you how to install anything that's missing.
 
-On Windows itself, `cargo build --release` should also work and writes `target\release\hwtest.exe`
+On Windows itself, `cargo build --release` should also work and writes `target\release\nyanspect.exe`
 (this route isn't covered by CI).
 
 ### Automatic builds (GitHub Actions)
 
 [`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml) builds both Windows versions on every push and
 pull request: x64 by running `build-windows.sh` on Linux, and ARM64 natively on a Windows 11 ARM machine.
-Download them from the run's **Artifacts** section (`hwtest-windows` and `hwtest-windows-arm64`).
+Download them from the run's **Artifacts** section (`nyanspect-windows` and `nyanspect-windows-arm64`).
 Pushing a version tag also attaches both exes to that release:
 
 ```bash
@@ -116,16 +116,16 @@ git push origin v1.1.0
 
 ## Graphics compatibility
 
-HW Test prefers the integrated GPU (it doesn't need a discrete one, which saves battery on laptops) and uses DirectX 12 on Windows or Vulkan on Linux.
+Nyanspect prefers the integrated GPU (it doesn't need a discrete one, which saves battery on laptops) and uses DirectX 12 on Windows or Vulkan on Linux.
 If that fails it restarts itself with OpenGL (`--opengl`), and if there's no usable GPU driver it falls back to a software renderer.
-Startup errors are shown in a dialog and saved to `hwtest-error.log` in the temp folder.
+Startup errors are shown in a dialog and saved to `nyanspect-error.log` in the temp folder.
 
 ## Notes
 
-- `vendor/egui-winit` is a lightly patched copy of [egui-winit](https://github.com/emilk/egui) 0.37 (MIT OR Apache-2.0), used so the app can tell numpad keys apart from the main keys. See [vendor/egui-winit/HWTEST_PATCH.md](vendor/egui-winit/HWTEST_PATCH.md).
+- `vendor/egui-winit` is a lightly patched copy of [egui-winit](https://github.com/emilk/egui) 0.37 (MIT OR Apache-2.0), used so the app can tell numpad keys apart from the main keys. See [vendor/egui-winit/NYANSPECT_PATCH.md](vendor/egui-winit/NYANSPECT_PATCH.md).
 - Japanese labels use a font already on the system (Noto Sans CJK on Linux, Yu Gothic or Meiryo on Windows). Without one, they are simply hidden.
 
 ## License
 
-HW Test is released under the [MIT License](LICENSE).
+Nyanspect is released under the [MIT License](LICENSE).
 The patched copy of egui-winit in `vendor/egui-winit` keeps its original MIT OR Apache-2.0 license.

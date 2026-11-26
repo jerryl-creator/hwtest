@@ -1105,7 +1105,7 @@ impl State {
         let pressed = *state == winit::event::ElementState::Pressed;
 
         let physical_key = if let winit::keyboard::PhysicalKey::Code(keycode) = *physical_key {
-            // hwtest patch: egui has no numpad keys, so report physical numpad
+            // nyanspect patch: egui has no numpad keys, so report physical numpad
             // keys as F20..F35 (which real keyboards don't have).
             numpad_as_f_key(keycode).or_else(|| key_from_key_code(keycode))
         } else {
@@ -1128,7 +1128,7 @@ impl State {
         // are mapped to the physical keys that normally contain C, X, V, etc.
         // See also: https://github.com/emilk/egui/issues/3653
         if let Some(active_key) = logical_key.or(physical_key) {
-            if false && pressed && self.clipboard_shortcuts { // hwtest patch: report every key
+            if false && pressed && self.clipboard_shortcuts { // nyanspect patch: report every key
                 if is_cut_command(self.modifiers, active_key) {
                     self.egui_input.events.push(egui::Event::Cut);
                     return;
@@ -2679,7 +2679,7 @@ pub fn short_window_event_description(event: &winit::event::WindowEvent) -> &'st
     }
 }
 
-/// hwtest patch: map physical numpad keys to otherwise-unused F-keys.
+/// nyanspect patch: map physical numpad keys to otherwise-unused F-keys.
 fn numpad_as_f_key(key: winit::keyboard::KeyCode) -> Option<egui::Key> {
     use egui::Key::*;
     use winit::keyboard::KeyCode as K;
