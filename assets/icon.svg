@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- HW Test logo: a black keycap with the white manga cat, a sparkle and halftone dots -->
+  <defs>
+    <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3a3f"/>
+      <stop offset="1" stop-color="#141416"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c2c31"/>
+      <stop offset="1" stop-color="#0c0c0e"/>
+    </linearGradient>
+    <clipPath id="face">
+      <rect x="30" y="26" width="196" height="186" rx="34"/>
+    </clipPath>
+  </defs>
+
+  <!-- keycap body + base (3D depth) -->
+  <rect x="12" y="20" width="232" height="226" rx="46" fill="#000"/>
+  <rect x="12" y="10" width="232" height="226" rx="46" fill="url(#cap)" stroke="#5a5a60" stroke-width="3"/>
+  <!-- keycap top face -->
+  <rect x="30" y="26" width="196" height="186" rx="34" fill="url(#top)"/>
+
+  <!-- halftone screentone in the bottom-left corner -->
+  <g clip-path="url(#face)" fill="#ffffff" fill-opacity="0.16">
+    <circle cx="40" cy="202" r="6"/><circle cx="58" cy="202" r="5"/><circle cx="76" cy="202" r="4"/><circle cx="94" cy="202" r="2.6"/><circle cx="112" cy="202" r="1.5"/>
+    <circle cx="49" cy="186" r="5"/><circle cx="67" cy="186" r="4"/><circle cx="85" cy="186" r="2.6"/><circle cx="103" cy="186" r="1.5"/>
+    <circle cx="40" cy="170" r="4.2"/><circle cx="58" cy="170" r="3.2"/><circle cx="76" cy="170" r="2"/>
+    <circle cx="49" cy="154" r="3"/><circle cx="67" cy="154" r="1.8"/>
+    <circle cx="40" cy="138" r="2"/>
+  </g>
+
+  <!-- cat: ears -->
+  <path d="M70 120 L72 54 L114 84 Z" fill="#fff" stroke="#0c0c0e" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M186 120 L184 54 L142 84 Z" fill="#fff" stroke="#0c0c0e" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M80 100 L81 70 L102 86 Z" fill="#c9c9ce"/>
+  <path d="M176 100 L175 70 L154 86 Z" fill="#c9c9ce"/>
+  <!-- cat: head -->
+  <ellipse cx="128" cy="134" rx="64" ry="56" fill="#fff" stroke="#0c0c0e" stroke-width="7"/>
+  <!-- eyes: big anime eyes with highlights -->
+  <ellipse cx="103" cy="128" rx="11" ry="15" fill="#0c0c0e"/>
+  <ellipse cx="153" cy="128" rx="11" ry="15" fill="#0c0c0e"/>
+  <ellipse cx="103" cy="135" rx="7.5" ry="6" fill="#6e6e76"/>
+  <ellipse cx="153" cy="135" rx="7.5" ry="6" fill="#6e6e76"/>
+  <circle cx="99" cy="121" r="4.6" fill="#fff"/>
+  <circle cx="149" cy="121" r="4.6" fill="#fff"/>
+  <circle cx="107" cy="137" r="1.8" fill="#fff"/>
+  <circle cx="157" cy="137" r="1.8" fill="#fff"/>
+  <!-- blush hatching /// -->
+  <g stroke="#0c0c0e" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round">
+    <path d="M78 152 l5 -9 M86 152 l5 -9 M94 152 l5 -9"/>
+    <path d="M160 152 l5 -9 M168 152 l5 -9 M176 152 l5 -9"/>
+  </g>
+  <!-- mouth ω -->
+  <path d="M116 152 q6 9 12 0 q6 9 12 0" fill="none" stroke="#0c0c0e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- sparkle (4-point star) -->
+  <path d="M198 30 Q201 49 218 52 Q201 55 198 74 Q195 55 178 52 Q195 49 198 30 Z" fill="#fff"/>
+  <path d="M222 82 Q223.5 90 231 91.5 Q223.5 93 222 101 Q220.5 93 213 91.5 Q220.5 90 222 82 Z" fill="#fff" fill-opacity="0.8"/>
+</svg>
