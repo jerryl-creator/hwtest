@@ -32,6 +32,7 @@ download the file for your system and run it. Nyanspect supports Windows 10/11 a
 | Windows, Intel or AMD processor (most PCs) | `nyanspect.exe` |
 | Windows, Snapdragon / ARM processor (e.g. Snapdragon X laptops) | `nyanspect-arm64.exe` |
 | Linux, 64-bit Intel or AMD (x86_64) | `nyanspect-linux-x86_64.tar.gz` |
+| Linux, 64-bit ARM (e.g. Raspberry Pi 4/5 with a 64-bit OS, ARM laptops) | `nyanspect-linux-arm64.tar.gz` |
 
 ### Windows
 
@@ -42,12 +43,13 @@ Windows may show a SmartScreen warning because the file isn't code-signed: choos
 ### Linux
 
 ```bash
-tar -xzf nyanspect-linux-x86_64.tar.gz
+tar -xzf nyanspect-linux-x86_64.tar.gz    # or nyanspect-linux-arm64.tar.gz
 cd nyanspect
 ./install.sh          # adds Nyanspect to your app menu (no sudo needed)
 ```
 
 Or skip installing and run `./nyanspect` straight from the folder. To remove it later: `./install.sh --uninstall`.
+Not sure which download? Run `uname -m`: `x86_64` means the x86_64 file, `aarch64` means the arm64 one.
 
 It runs on Ubuntu 22.04 or newer, Debian 12+, Fedora, Arch and most other current distros, with Wayland or X11.
 It needs the ALSA sound library (`libasound`), which desktop systems already have.
@@ -98,7 +100,8 @@ cargo build --release
 ./target/release/nyanspect
 ```
 
-To make the same `.tar.gz` package as the releases: `./package-linux.sh` (writes `dist/nyanspect-linux-x86_64.tar.gz`).
+To make the same `.tar.gz` package as the releases: `./package-linux.sh` (writes `dist/nyanspect-linux-<cpu>.tar.gz`
+for the machine you run it on: `x86_64` or `arm64`).
 
 ### 3. Build the Windows `.exe` from Linux
 
@@ -125,11 +128,11 @@ On Windows itself, `cargo build --release` should also work and writes `target\r
 
 ### Automatic builds (GitHub Actions)
 
-[`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml) builds all three downloads on every push and
+[`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml) builds all four downloads on every push and
 pull request: Windows x64 by running `build-windows.sh` on Linux, Windows ARM64 natively on a Windows 11 ARM machine,
-and Linux by running the tests and `package-linux.sh` on Ubuntu 22.04.
-Download them from the run's **Artifacts** section (`nyanspect-windows`, `nyanspect-windows-arm64`, `nyanspect-linux`).
-Pushing a version tag also attaches all three to that release:
+and Linux x86_64 and ARM64 by running the tests and `package-linux.sh` natively on Ubuntu 22.04 (Intel and ARM machines).
+Download them from the run's **Artifacts** section (`nyanspect-windows`, `nyanspect-windows-arm64`,
+`nyanspect-linux-x86_64`, `nyanspect-linux-arm64`). Pushing a version tag also attaches all of them to that release:
 
 ```bash
 git tag v1.1.0

@@ -3,8 +3,9 @@ name: Build Windows exe
 # Every push and pull request: build Nyanspect and keep the results as downloadable artifacts:
 #   nyanspect.exe                    Windows x64 (Intel and AMD), cross-compiled on Linux like build-windows.sh
 #   nyanspect-arm64.exe              Windows ARM64 (Snapdragon / Windows on ARM), built natively on Windows 11 ARM
-#   nyanspect-linux-x86_64.tar.gz    Linux x86_64, built on Ubuntu 22.04 so it runs on that and anything newer
-# Pushing a version tag (e.g. v1.4.0): also attach all three to that GitHub release.
+#   nyanspect-linux-x86_64.tar.gz    Linux x86_64 (Intel and AMD)  } built natively on Ubuntu 22.04, so they
+#   nyanspect-linux-arm64.tar.gz     Linux ARM64                   } run on that and anything newer
+# Pushing a version tag (e.g. v1.4.0): also attach all of them to that GitHub release.
 # (The workflow keeps its original file name so the README badge and run history stay put.)
 on:
   push:
@@ -103,14 +104,27 @@ jobs:
           if-no-files-found: error
 
   build-linux:
-    name: Linux x86_64
-    # The oldest supported Ubuntu: a binary built against an older glibc runs on newer distros too.
-    runs-on: ubuntu-22.04
+    name: Linux ${{ matrix.arch }}
+    strategy:
+      matrix:
+        include:
+          # The oldest supported Ubuntu: a binary built against an older glibc runs on newer distros too.
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust (rustup)
         run: |
+          # The ARM runner image may not ship with Rust: install rustup if it's missing.
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
           rustup toolchain install stable --profile minimal
           rustup default stable
 
@@ -124,8 +138,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: linux-x86_64-${{ hashFiles('Cargo.lock') }}
-          restore-keys: linux-x86_64-
+          key: linux-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: linux-${{ matrix.arch }}-
 
       - name: Run tests
         run: cargo test --locked
@@ -135,8 +149,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nyanspect-linux
-          path: dist/nyanspect-linux-x86_64.tar.gz
+          name: nyanspect-linux-${{ matrix.arch }}
+          path: dist/nyanspect-linux-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
 
   release:
@@ -161,4 +175,5 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "Nyanspect $TAG" --generate-notes --verify-tag
-          gh release upload "$TAG" dist/nyanspect.exe dist/nyanspect-arm64.exe dist/nyanspect-linux-x86_64.tar.gz --clobber
+          gh release upload "$TAG" dist/nyanspect.exe dist/nyanspect-arm64.exe \
+            dist/nyanspect-linux-x86_64.tar.gz dist/nyanspect-linux-arm64.tar.gz --clobber
