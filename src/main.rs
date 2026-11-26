@@ -1,6 +1,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")] // no console window on Windows
 
 mod chatter;
+mod gamepad;
 mod keyboard;
 mod layouts;
 mod mic;
@@ -20,6 +21,7 @@ use theme::alpha;
 enum Tab {
     Keyboard,
     Mouse,
+    Gamepad,
     Display,
     Audio,
 }
@@ -27,6 +29,7 @@ enum Tab {
 const TABS: &[(Tab, &str, &str, &str)] = &[
     (Tab::Keyboard, "⌨", "Keyboard", "キーボード"),
     (Tab::Mouse, "🖱", "Mouse", "マウス"),
+    (Tab::Gamepad, "🎮", "Gamepad", "ゲームパッド"),
     (Tab::Display, "★", "Display", "ディスプレイ"),
     (Tab::Audio, "🔊", "Audio", "オーディオ"),
 ];
@@ -41,6 +44,7 @@ struct App {
     speakers: speakers::SpeakerTest,
     mic: mic::MicTest,
     mouse: mouse::MouseTest,
+    gamepad: gamepad::GamepadTest,
 }
 
 impl App {
@@ -60,6 +64,7 @@ impl App {
             speakers: speakers::SpeakerTest::new(),
             mic: mic::MicTest::default(),
             mouse: mouse::MouseTest::default(),
+            gamepad: gamepad::GamepadTest::default(),
         };
         // Restore remembered settings (skipped for dev screenshots so they're reproducible).
         let saved = cc
@@ -232,6 +237,7 @@ impl eframe::App for App {
         self.bg.paint(ctx);
 
         egui::Panel::top("tabs").show(ui, |ui| self.header(ui));
+        self.gamepad.poll(ctx);
 
         if self.tab != Tab::Audio {
             self.speakers.stop();
@@ -251,6 +257,7 @@ impl eframe::App for App {
                 egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| match self.tab {
                     Tab::Keyboard => self.keyboard.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Mouse => self.mouse.ui(ui, &mut self.mascot, self.cjk),
+                    Tab::Gamepad => self.gamepad.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Display => self.pixels.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Audio => {
                         self.speakers.ui(ui, &mut self.mascot, self.cjk);
