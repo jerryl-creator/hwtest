@@ -1,6 +1,8 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")] // no console window on Windows
 
+mod chatter;
 mod keyboard;
+mod layouts;
 mod pixels;
 mod sfx;
 mod sfx_audio;
@@ -46,7 +48,7 @@ impl App {
             cjk,
             bg: theme::Background::new(),
             mascot: theme::Mascot::new(),
-            keyboard: keyboard::KeyboardTest::default(),
+            keyboard: keyboard::KeyboardTest::from_env(),
             pixels: pixels::PixelTest::default(),
             speakers: speakers::SpeakerTest::new(),
         }
@@ -121,14 +123,24 @@ impl eframe::App for App {
             return;
         }
         let t = raw.time.unwrap_or(0.0);
-        let script = [(1.2, egui::Key::A), (1.5, egui::Key::F5), (1.8, egui::Key::Escape), (2.1, egui::Key::Space), (2.3, egui::Key::F25)];
+        // (time, key, presses in the same frame): 2 presses at once simulates a chattering switch.
+        let script = [
+            (1.2, egui::Key::A, 1),
+            (1.5, egui::Key::F5, 1),
+            (1.8, egui::Key::Escape, 1),
+            (1.9, egui::Key::E, 2),
+            (2.1, egui::Key::Space, 1),
+            (2.3, egui::Key::F25, 1),
+        ];
         use std::sync::atomic::{AtomicUsize, Ordering};
         static NEXT: AtomicUsize = AtomicUsize::new(0);
-        for (i, (at, key)) in script.into_iter().enumerate() {
+        for (i, (at, key, presses)) in script.into_iter().enumerate() {
             if t >= at && NEXT.load(Ordering::Relaxed) == i {
                 NEXT.store(i + 1, Ordering::Relaxed);
-                for pressed in [true, false] {
-                    raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers: Default::default() });
+                for _ in 0..presses {
+                    for pressed in [true, false] {
+                        raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers: Default::default() });
+                    }
                 }
             }
         }
@@ -342,7 +354,8 @@ fn dev_screenshot(ctx: &egui::Context, tab: &mut Tab) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
     }
     let key = egui::Id::unique("dev-shot-sent");
-    if time > 2.5 && !ctx.data(|d| d.get_temp::<bool>(key).unwrap_or(false)) {
+    let at = std::env::var("NYANSPECT_SHOT_AT").ok().and_then(|v| v.parse().ok()).unwrap_or(2.5);
+    if time > at && !ctx.data(|d| d.get_temp::<bool>(key).unwrap_or(false)) {
         ctx.data_mut(|d| d.insert_temp(key, true));
         eprintln!("renderer: {}", RENDERER_INFO.get().map_or("?", |s| s.as_str()));
         let ctx2 = ctx.clone();

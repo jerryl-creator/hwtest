@@ -282,6 +282,49 @@ pub fn fancy_button(ui: &mut Ui, label: &str, size: Vec2, c1: Color32, c2: Color
     }
 }
 
+/// Segmented pill buttons for picking one option. Never takes keyboard focus (so key tests
+/// can't trigger it). Returns true when the selection changed.
+pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, id: &str, options: &[(T, &str, &str)], value: &mut T) -> bool {
+    let font = bold(13.0);
+    let pad = 14.0;
+    let h = 28.0;
+    let widths: Vec<f32> = options
+        .iter()
+        .map(|(_, label, _)| ui.painter().layout_no_wrap(label.to_string(), font.clone(), Color32::WHITE).size().x + pad * 2.0)
+        .collect();
+    let total: f32 = widths.iter().sum::<f32>() + 6.0;
+    let (bar, _) = ui.allocate_exact_size(Vec2::new(total, h + 6.0), Sense::hover());
+    let p = ui.painter().clone();
+    p.rect_filled(bar, (h + 6.0) / 2.0, Color32::from_rgba_unmultiplied(10, 10, 12, 210));
+    p.rect_stroke(bar, (h + 6.0) / 2.0, Stroke::new(1.0, alpha(LIGHT, 0.15)), StrokeKind::Inside);
+
+    let mut changed = false;
+    let mut x = bar.left() + 3.0;
+    for (i, ((opt, label, hint), w)) in options.iter().zip(&widths).enumerate() {
+        let r = Rect::from_min_size(Pos2::new(x, bar.top() + 3.0), Vec2::new(*w, h));
+        x += w;
+        let resp = ui
+            .interact(r, ui.scope_id().with((id, i)), Sense::CLICK)
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(*hint);
+        if resp.clicked() && *value != *opt {
+            *value = *opt;
+            changed = true;
+        }
+        let sel = *value == *opt;
+        let on = ui.ctx().animate_bool_with_time(resp.id.with("sel"), sel, 0.18);
+        let hover = ui.ctx().animate_bool_with_time(resp.id.with("hov"), resp.hovered() && !sel, 0.12);
+        if on > 0.01 {
+            hgradient(&p, r, h / 2.0, alpha(ACCENT, on), alpha(SILVER, on));
+        } else if hover > 0.0 {
+            p.rect_filled(r, h / 2.0, alpha(Color32::WHITE, 0.07 * hover));
+        }
+        let col = lerp_color(lerp_color(TEXT_DIM, TEXT, hover), INK, on);
+        p.text(r.center(), Align2::CENTER_CENTER, *label, font.clone(), col);
+    }
+    changed
+}
+
 // ---------- animated background ----------
 
 struct Petal {

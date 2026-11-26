@@ -1,119 +1,10 @@
+use crate::chatter::ChatterDetector;
+use crate::layouts::{self, Layout, Size, Style, *};
 use crate::sfx::Sfx;
 use crate::theme::{self, alpha, lerp_color, Mascot};
 use eframe::egui::{self, Align2, Color32, FontId, Key, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-/// One keycap: label, key, position and size in key units.
-struct Cap {
-    label: &'static str,
-    key: Key,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-}
-
-/// Builds a row of caps left to right.
-struct Row<'a> {
-    caps: &'a mut Vec<Cap>,
-    x: f32,
-    y: f32,
-}
-
-impl Row<'_> {
-    fn key(&mut self, label: &'static str, key: Key, w: f32) -> &mut Self {
-        self.caps.push(Cap { label, key, x: self.x, y: self.y, w, h: 1.0 });
-        self.x += w;
-        self
-    }
-    fn k(&mut self, label: &'static str, key: Key) -> &mut Self {
-        self.key(label, key, 1.0)
-    }
-    fn tall(&mut self, label: &'static str, key: Key) -> &mut Self {
-        self.caps.push(Cap { label, key, x: self.x, y: self.y, w: 1.0, h: 2.0 });
-        self.x += 1.0;
-        self
-    }
-    fn gap(&mut self, w: f32) -> &mut Self {
-        self.x += w;
-        self
-    }
-    fn at(&mut self, x: f32) -> &mut Self {
-        self.x = x;
-        self
-    }
-}
-
-// Numpad keys arrive as F20..F35 thanks to the patch in vendor/egui-winit.
-const NP0: Key = Key::F20;
-const NP1: Key = Key::F21;
-const NP2: Key = Key::F22;
-const NP3: Key = Key::F23;
-const NP4: Key = Key::F24;
-const NP5: Key = Key::F25;
-const NP6: Key = Key::F26;
-const NP7: Key = Key::F27;
-const NP8: Key = Key::F28;
-const NP9: Key = Key::F29;
-const NP_DOT: Key = Key::F30;
-const NP_ADD: Key = Key::F31;
-const NP_SUB: Key = Key::F32;
-const NP_MUL: Key = Key::F33;
-const NP_DIV: Key = Key::F34;
-const NP_ENTER: Key = Key::F35;
-
-/// Standard full-size (104-key ANSI) Windows layout: 22.5 × 6.5 units.
-fn windows_layout() -> Vec<Cap> {
-    use Key::*;
-    let mut c = Vec::new();
-    let nav = 15.25;
-    let pad = 18.5;
-
-    row(&mut c, 0.0).k("Esc", Escape).gap(1.0)
-        .k("F1", F1).k("F2", F2).k("F3", F3).k("F4", F4).gap(0.5)
-        .k("F5", F5).k("F6", F6).k("F7", F7).k("F8", F8).gap(0.5)
-        .k("F9", F9).k("F10", F10).k("F11", F11).k("F12", F12)
-        .at(nav).k("PrtSc", PrintScreen).k("ScrLk", ScrollLock).k("Pause", Pause);
-
-    let y = 1.5;
-    row(&mut c, y).k("`", Backtick).k("1", Num1).k("2", Num2).k("3", Num3).k("4", Num4).k("5", Num5)
-        .k("6", Num6).k("7", Num7).k("8", Num8).k("9", Num9).k("0", Num0).k("-", Minus).k("=", Equals)
-        .key("Backspace", Backspace, 2.0)
-        .at(nav).k("Ins", Insert).k("Home", Home).k("PgUp", PageUp)
-        .at(pad).k("Num", NumLock).k("/", NP_DIV).k("*", NP_MUL).k("−", NP_SUB);
-
-    row(&mut c, y + 1.0).key("Tab", Tab, 1.5).k("Q", Q).k("W", W).k("E", E).k("R", R).k("T", T).k("Y", Y)
-        .k("U", U).k("I", I).k("O", O).k("P", P).k("[", OpenBracket).k("]", CloseBracket)
-        .key("\\", Backslash, 1.5)
-        .at(nav).k("Del", Delete).k("End", End).k("PgDn", PageDown)
-        .at(pad).k("7", NP7).k("8", NP8).k("9", NP9).tall("+", NP_ADD);
-
-    row(&mut c, y + 2.0).key("Caps Lock", CapsLock, 1.75).k("A", A).k("S", S).k("D", D).k("F", F).k("G", G)
-        .k("H", H).k("J", J).k("K", K).k("L", L).k(";", Semicolon).k("'", Quote)
-        .key("Enter", Enter, 2.25)
-        .at(pad).k("4", NP4).k("5", NP5).k("6", NP6);
-
-    row(&mut c, y + 3.0).key("Shift", ShiftLeft, 2.25).k("Z", Z).k("X", X).k("C", C).k("V", V).k("B", B)
-        .k("N", N).k("M", M).k(",", Comma).k(".", Period).k("/", Slash)
-        .key("Shift", ShiftRight, 2.75)
-        .at(nav + 1.0).k("↑", ArrowUp)
-        .at(pad).k("1", NP1).k("2", NP2).k("3", NP3).tall("Enter", NP_ENTER);
-
-    row(&mut c, y + 4.0).key("Ctrl", ControlLeft, 1.25).key("Win", SuperLeft, 1.25).key("Alt", AltLeft, 1.25)
-        .key("", Space, 6.25)
-        .key("Alt", AltRight, 1.25).key("Win", SuperRight, 1.25).key("Menu", Menu, 1.25)
-        .key("Ctrl", ControlRight, 1.25)
-        .at(nav).k("←", ArrowLeft).k("↓", ArrowDown).k("→", ArrowRight)
-        .at(pad).key("0", NP0, 2.0).k(".", NP_DOT);
-    c
-}
-
-fn row(caps: &mut Vec<Cap>, y: f32) -> Row<'_> {
-    Row { caps, x: 0.0, y }
-}
-
-const LAYOUT_W: f32 = 22.5;
-const LAYOUT_H: f32 = 6.5;
 
 struct Spark {
     pos: Pos2,
@@ -130,7 +21,12 @@ struct Ring {
 }
 
 pub struct KeyboardTest {
-    caps: Vec<Cap>,
+    size: Size,
+    style: Style,
+    layout: Layout,
+    chatter: ChatterDetector,
+    /// When each key last chattered (for the warning flash).
+    chatter_at: HashMap<Key, f32>,
     down: HashSet<Key>,
     tested: HashSet<Key>,
     log: VecDeque<(String, f32)>,
@@ -148,7 +44,11 @@ pub struct KeyboardTest {
 impl Default for KeyboardTest {
     fn default() -> Self {
         Self {
-            caps: windows_layout(),
+            size: Size::Full,
+            style: Style::Ansi,
+            layout: layouts::build(Size::Full, Style::Ansi),
+            chatter: ChatterDetector::default(),
+            chatter_at: HashMap::new(),
             down: HashSet::new(),
             tested: HashSet::new(),
             log: VecDeque::new(),
@@ -185,6 +85,17 @@ fn pretty(key: Key) -> String {
 }
 
 impl KeyboardTest {
+    /// Default layout, or the one named in NYANSPECT_LAYOUT (dev/screenshots), e.g. "tkl-iso".
+    pub fn from_env() -> Self {
+        let mut kb = Self::default();
+        if let Ok(v) = std::env::var("NYANSPECT_LAYOUT") {
+            kb.size = if v.contains("tkl") { Size::Tkl } else if v.contains("compact") { Size::Compact } else { Size::Full };
+            kb.style = if v.contains("iso") { Style::Iso } else { Style::Ansi };
+            kb.layout = layouts::build(kb.size, kb.style);
+        }
+        kb
+    }
+
     /// Sound effects triggered since the last call (empty when SFX is off).
     pub fn take_sounds(&mut self) -> Vec<crate::sfx_audio::SfxSound> {
         std::mem::take(&mut self.sfx.sounds)
@@ -209,7 +120,12 @@ impl KeyboardTest {
                         let first = self.tested.insert(key);
                         if !repeat {
                             self.pending.push((key, first));
-                            self.log.push_front((pretty(key), now));
+                            if self.chatter.press(key, now as f64) {
+                                self.chatter_at.insert(key, now);
+                                self.log.push_front((format!("⚠ {} chatter", pretty(key)), now));
+                            } else {
+                                self.log.push_front((pretty(key), now));
+                            }
                             mascot.cheer();
                         }
                     } else {
@@ -233,16 +149,21 @@ impl KeyboardTest {
         });
         self.handle_input(ui.ctx(), mascot);
         let (now, dt) = ui.input(|i| (i.time as f32, i.stable_dt.min(0.05)));
-        let total = self.caps.len();
-        let done = self.caps.iter().filter(|c| self.tested.contains(&c.key)).count();
+        let total = self.layout.caps.len();
+        let done = self.layout.caps.iter().filter(|c| self.tested.contains(&c.key)).count();
         let frac = done as f32 / total as f32;
+        let worst = self.chatter.worst();
 
         match done {
+            _ if !worst.is_empty() => {
+                mascot.say(format!("Hmm… {} pressed itself twice (；ω；)", pretty(worst[0].0)))
+            }
             0 => mascot.say("Press any key on your keyboard~ ♪"),
             d if d == total => mascot.say("All keys work! Sugoi~! ＼(^o^)／"),
             _ if frac > 0.75 => mascot.say("Almost there, ganbatte!"),
             _ if frac > 0.4 => mascot.say("Nice, keep going nya~"),
-            _ => mascot.say("Yay! Try every key, even the numpad!"),
+            _ if self.size == Size::Full => mascot.say("Yay! Try every key, even the numpad!"),
+            _ => mascot.say("Yay! Try every key on your keyboard!"),
         }
 
         // Centre the card vertically in any space left over (measured from the previous frame).
@@ -256,6 +177,8 @@ impl KeyboardTest {
                     if theme::fancy_button(ui, "↺ Reset", Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
                         self.tested.clear();
                         self.log.clear();
+                        self.chatter.clear();
+                        self.chatter_at.clear();
                         self.celebrated = false;
                     }
                     ui.add_space(6.0);
@@ -274,13 +197,36 @@ impl KeyboardTest {
                 });
             });
 
-            // Fit both the width and the height of the window (the card's other rows need ~178 px).
-            let by_width = ui.available_width() / LAYOUT_W;
-            let by_height = if self.fit_height > 0.0 { (self.fit_height - 178.0) / LAYOUT_H } else { f32::MAX };
+            // Layout picker: size and ANSI/ISO style.
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Layout").size(13.0).color(theme::TEXT_DIM));
+                let sizes: Vec<_> = Size::ALL.iter().map(|s| (*s, s.label(), s.hint())).collect();
+                let styles: Vec<_> = Style::ALL.iter().map(|s| (*s, s.label(), s.hint())).collect();
+                let changed = theme::segmented(ui, "kb-size", &sizes, &mut self.size)
+                    | {
+                        ui.add_space(10.0);
+                        theme::segmented(ui, "kb-style", &styles, &mut self.style)
+                    };
+                if changed {
+                    self.layout = layouts::build(self.size, self.style);
+                    self.celebrated = false;
+                }
+                if self.size == Size::Compact {
+                    ui.add_space(10.0);
+                    ui.label(egui::RichText::new("Fn can't be tested: it never reaches apps.").size(12.0).color(theme::TEXT_DIM));
+                }
+            });
+
+            // Fit both the width and the height of the window (the card's other rows need ~214 px).
+            let (lw, lh) = (self.layout.w, self.layout.h);
+            let by_width = ui.available_width() / lw;
+            // The chatter summary adds another row (~32 px) below the keyboard.
+            let reserved = if worst.is_empty() { 214.0 } else { 246.0 };
+            let by_height = if self.fit_height > 0.0 { (self.fit_height - reserved) / lh } else { f32::MAX };
             let unit = by_width.min(by_height).clamp(26.0, 96.0);
             // Keys may get up to 15% taller to use spare height on wide screens.
             let unit_y = by_height.min(unit * 1.15).max(unit);
-            let size = Vec2::new(unit * LAYOUT_W, unit_y * LAYOUT_H);
+            let size = Vec2::new(unit * lw, unit_y * lh);
             ui.add_space(6.0);
             let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), size.y + 4.0), Sense::hover());
             let origin = Pos2::new(rect.center().x - size.x / 2.0, rect.top());
@@ -319,6 +265,22 @@ impl KeyboardTest {
                 }
             });
             ui.add_space(4.0);
+            if !worst.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new("⚠ Chatter (one press counted twice):").font(theme::bold(13.0)).color(Color32::WHITE));
+                    for (key, n) in worst.iter().take(8) {
+                        egui::Frame::new()
+                            .fill(Color32::WHITE)
+                            .corner_radius(10)
+                            .inner_margin(egui::Margin::symmetric(8, 2))
+                            .show(ui, |ui| {
+                                ui.label(egui::RichText::new(format!("{} ×{n}", pretty(*key))).size(12.5).color(theme::INK));
+                            });
+                    }
+                    ui.label(egui::RichText::new("Press it a few more times to confirm; cleaning or replacing the switch usually fixes it.").size(12.0).color(theme::TEXT_DIM));
+                });
+                ui.add_space(2.0);
+            }
             ui.label(
                 egui::RichText::new("Tip: Win, PrtSc and some F-keys may be grabbed by your desktop before the app sees them.")
                     .size(12.0)
@@ -349,7 +311,7 @@ impl KeyboardTest {
         let gap = (unit * 0.08).max(2.5);
         let mut spawn = Vec::new();
 
-        for cap in &self.caps {
+        for cap in &self.layout.caps {
             let rect = Rect::from_min_size(
                 origin + Vec2::new(cap.x * units.x, cap.y * units.y),
                 Vec2::new(cap.w * units.x, cap.h * units.y),
@@ -389,9 +351,41 @@ impl KeyboardTest {
             theme::vgradient(&painter, gloss, r * 0.8, alpha(Color32::WHITE, 0.16 + 0.1 * ok), alpha(Color32::WHITE, 0.0));
             painter.rect_stroke(body, r, Stroke::new(1.0, alpha(Color32::WHITE, 0.10 + 0.25 * ok.max(hold))), StrokeKind::Inside);
 
+            // Chatter warning: diagonal hazard stripes, a "!N" badge, and a pulse right after it happens.
+            let chatters = self.chatter.count(cap.key);
+            if chatters > 0 {
+                let clip = painter.with_clip_rect(body.shrink(1.0));
+                let step = (unit * 0.22).max(6.0);
+                let mut x = body.left() - body.height();
+                while x < body.right() {
+                    clip.line_segment(
+                        [Pos2::new(x, body.bottom()), Pos2::new(x + body.height(), body.top())],
+                        Stroke::new(step * 0.35, alpha(theme::INK, 0.55)),
+                    );
+                    x += step;
+                }
+                painter.rect_stroke(body, r, Stroke::new(2.5, Color32::WHITE), StrokeKind::Inside);
+                let since = self.chatter_at.get(&cap.key).map_or(9.0, |t| now - t);
+                if since < 1.0 {
+                    let e = since * unit * 0.5;
+                    painter.rect_stroke(body.expand(e), r + e, Stroke::new(3.0 * (1.0 - since), alpha(Color32::WHITE, 1.0 - since)), StrokeKind::Outside);
+                }
+                let badge = Pos2::new(body.right() - 2.0, body.top() + 2.0);
+                let br = (unit * 0.17).max(7.0);
+                painter.circle(badge, br, Color32::WHITE, Stroke::new(1.5, theme::INK));
+                let txt = if chatters > 9 { "!".to_string() } else { format!("!{chatters}") };
+                painter.text(badge, Align2::CENTER_CENTER, txt, theme::bold(br * 1.05), theme::INK);
+            }
+
             let label_size = if cap.label.chars().count() > 3 { unit * 0.24 } else { unit * 0.32 };
             let txt = lerp_color(lerp_color(theme::TEXT_DIM, Color32::WHITE, ok), theme::INK, hold);
-            painter.text(body.center(), Align2::CENTER_CENTER, cap.label, FontId::proportional(label_size.max(9.5)), txt);
+            // Japanese fonts draw "\" as a yen sign, so use the built-in monospace font for it.
+            let font = if cap.label == "\\" {
+                FontId::monospace(label_size.max(9.5) * 1.1)
+            } else {
+                FontId::proportional(label_size.max(9.5))
+            };
+            painter.text(body.center(), Align2::CENTER_CENTER, cap.label, font, txt);
         }
 
         // Expanding rings for first-time presses.
