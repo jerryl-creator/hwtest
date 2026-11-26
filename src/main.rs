@@ -7,6 +7,7 @@ mod layouts;
 mod mic;
 mod mouse;
 mod pixels;
+mod report;
 mod settings;
 mod sfx;
 mod sfx_audio;
@@ -24,6 +25,7 @@ enum Tab {
     Gamepad,
     Display,
     Audio,
+    Report,
 }
 
 const TABS: &[(Tab, &str, &str, &str)] = &[
@@ -32,6 +34,7 @@ const TABS: &[(Tab, &str, &str, &str)] = &[
     (Tab::Gamepad, "🎮", "Gamepad", "ゲームパッド"),
     (Tab::Display, "★", "Display", "ディスプレイ"),
     (Tab::Audio, "🔊", "Audio", "オーディオ"),
+    (Tab::Report, "📋", "Report", "レポート"),
 ];
 
 struct App {
@@ -45,6 +48,7 @@ struct App {
     mic: mic::MicTest,
     mouse: mouse::MouseTest,
     gamepad: gamepad::GamepadTest,
+    report: report::ReportTab,
 }
 
 impl App {
@@ -65,6 +69,7 @@ impl App {
             mic: mic::MicTest::default(),
             mouse: mouse::MouseTest::default(),
             gamepad: gamepad::GamepadTest::default(),
+            report: report::ReportTab::default(),
         };
         // Restore remembered settings (skipped for dev screenshots so they're reproducible).
         let saved = cc
@@ -109,7 +114,11 @@ impl App {
 
     fn tab_bar(&mut self, ui: &mut egui::Ui) {
         // Tabs share the space: wide with few tabs, narrower as more are added.
-        let tab_w = if TABS.len() <= 3 { 138.0 } else { 112.0 };
+        let tab_w = match TABS.len() {
+            0..=3 => 138.0,
+            4..=5 => 112.0,
+            _ => 100.0,
+        };
         let font = if TABS.len() <= 3 { 14.5 } else { 13.5 };
         let (bar, _) = ui.allocate_exact_size(Vec2::new(tab_w * TABS.len() as f32 + 12.0, 50.0), Sense::hover());
         let p = ui.painter().clone();
@@ -259,6 +268,18 @@ impl eframe::App for App {
                     Tab::Mouse => self.mouse.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Gamepad => self.gamepad.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Display => self.pixels.ui(ui, &mut self.mascot, self.cjk),
+                    Tab::Report => {
+                        let sections = [
+                            self.keyboard.report(),
+                            self.mouse.report(),
+                            self.gamepad.report(),
+                            self.pixels.report(),
+                            self.speakers.report(),
+                            self.mic.report(),
+                        ];
+                        let header = report::Header { renderer: RENDERER_INFO.get().cloned().unwrap_or_else(|| "unknown".into()) };
+                        self.report.ui(ui, &mut self.mascot, self.cjk, &header, &sections);
+                    }
                     Tab::Audio => {
                         self.speakers.ui(ui, &mut self.mascot, self.cjk);
                         ui.add_space(14.0);
@@ -435,7 +456,10 @@ fn fatal(msg: &str) {
 
 /// Dev helper: `NYANSPECT_SHOT=out.png NYANSPECT_TAB=<index> nyanspect` saves a window screenshot and exits.
 fn dev_screenshot(ctx: &egui::Context, tab: &mut Tab) {
-    if let Ok(t) = std::env::var("NYANSPECT_TAB") {
+    // NYANSPECT_TAB=<index>; optionally NYANSPECT_TAB2=<index> takes over after 2.4 s (e.g. run a demo, then show the report).
+    let time = ctx.input(|i| i.time);
+    let pick = if time > 2.4 { std::env::var("NYANSPECT_TAB2").or_else(|_| std::env::var("NYANSPECT_TAB")) } else { std::env::var("NYANSPECT_TAB") };
+    if let Ok(t) = pick {
         *tab = TABS[t.parse::<usize>().unwrap_or(0).min(TABS.len() - 1)].0;
     }
     // NYANSPECT_QUIT_AT=<seconds>: close normally (settings get saved) after that long.
@@ -445,7 +469,6 @@ fn dev_screenshot(ctx: &egui::Context, tab: &mut Tab) {
         }
     }
     let Ok(path) = std::env::var("NYANSPECT_SHOT") else { return };
-    let time = ctx.input(|i| i.time);
     if std::env::var("NYANSPECT_MAX").is_ok() && time < 0.5 {
         ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
     }

@@ -86,6 +86,42 @@ impl MouseTest {
         }
     }
 
+    pub fn report(&self) -> crate::report::Section {
+        use crate::report::{Section, Status};
+        let n = self.tested.iter().filter(|t| **t).count();
+        let chatter: Vec<String> = (0..5).filter(|i| self.chatter[*i] > 0).map(|i| format!("{} ×{}", BUTTONS[i].1, self.chatter[i])).collect();
+        let basics = self.tested[0] && self.tested[1] && self.tested[2]
+            && self.scrolled.contains(&Scroll::Up) && self.scrolled.contains(&Scroll::Down);
+        let status = if !chatter.is_empty() {
+            Status::Issue
+        } else if n == 0 && self.scrolled.is_empty() {
+            Status::NotTested
+        } else if basics {
+            Status::Pass
+        } else {
+            Status::InProgress
+        };
+        let names = |want: bool| -> String {
+            let v: Vec<&str> = BUTTONS.iter().enumerate().filter(|(i, _)| self.tested[*i] == want).map(|(_, (_, n))| *n).collect();
+            if v.is_empty() { "none".into() } else { v.join(", ") }
+        };
+        let mut lines = vec![format!("Buttons working: {}", names(true))];
+        if n < 5 {
+            lines.push(format!("Not clicked yet: {}", names(false)));
+        }
+        let dirs: Vec<&str> = [(Scroll::Up, "up"), (Scroll::Down, "down"), (Scroll::Left, "left"), (Scroll::Right, "right")]
+            .iter()
+            .filter(|(d, _)| self.scrolled.contains(d))
+            .map(|(_, n)| *n)
+            .collect();
+        lines.push(format!("Scroll: {}", if dirs.is_empty() { "not tested".into() } else { dirs.join(", ") }));
+        lines.push(format!("Double-click: {}", if self.double_clicked { "works" } else { "not tested" }));
+        if !chatter.is_empty() {
+            lines.push(format!("Click chatter (one click counted twice): {}", chatter.join(", ")));
+        }
+        Section { title: "Mouse", jp: "マウス", status, lines }
+    }
+
     pub fn reset(&mut self) {
         *self = Self { fit_height: self.fit_height, ..Self::default() };
     }

@@ -276,6 +276,34 @@ impl PixelTest {
         }
     }
 
+    pub fn report(&self) -> crate::report::Section {
+        use crate::report::{Section, Status};
+        let status = if !self.marks.is_empty() {
+            Status::Issue
+        } else if self.done_modes.is_empty() {
+            Status::NotTested
+        } else {
+            Status::Pass
+        };
+        let mut lines = Vec::new();
+        if let Some((w, h)) = self.screen_px {
+            lines.push(format!("Screen: {w} × {h} pixels"));
+        }
+        if !self.done_modes.is_empty() {
+            lines.push(format!("Tests run: {}", self.done_modes.join(", ")));
+        }
+        if self.marks.is_empty() {
+            if !self.done_modes.is_empty() {
+                lines.push("No bad spots marked".into());
+            }
+        } else {
+            for (i, m) in self.marks.iter().enumerate() {
+                lines.push(format!("Marked spot #{} at x {}, y {} (on {})", i + 1, m.px.0, m.px.1, m.on));
+            }
+        }
+        Section { title: "Display", jp: "ディスプレイ", status, lines }
+    }
+
     /// Dev/screenshots: start the fullscreen test in the given mode.
     pub fn dev_start(&mut self, mode: usize) {
         self.mode = Mode::ALL[mode.min(2)];

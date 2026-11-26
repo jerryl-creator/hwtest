@@ -69,8 +69,37 @@ impl MicTest {
         self.stream.is_some()
     }
 
-    pub fn device(&self) -> &str {
-        &self.device_name
+    pub fn report(&self) -> crate::report::Section {
+        use crate::report::{Section, Status};
+        let started = !self.device_name.is_empty() || self.error.is_some();
+        let silent = started && !self.signal_seen;
+        let status = if self.error.is_some() || self.playback_ok == Some(false) || silent {
+            Status::Issue
+        } else if !started {
+            Status::NotTested
+        } else if self.playback_ok == Some(true) {
+            Status::Pass
+        } else {
+            Status::InProgress
+        };
+        let mut lines = Vec::new();
+        if let Some(e) = &self.error {
+            lines.push(format!("Couldn't open the microphone: {e}"));
+        }
+        if !self.device_name.is_empty() {
+            lines.push(format!("Input: {}", self.device_name));
+        }
+        if silent {
+            lines.push("No signal at all: microphone muted or blocked?".into());
+        } else if let Some(db) = self.max_db {
+            lines.push(format!("Loudest level: {db:.0} dB"));
+        }
+        lines.push(match self.playback_ok {
+            Some(true) => "Recording played back clearly".into(),
+            Some(false) => "Recording sounded bad (quiet, noisy or crackly)".into(),
+            None => "Record & play back: not tried".into(),
+        });
+        Section { title: "Microphone", jp: "マイク", status, lines }
     }
 
     pub fn stop(&mut self) {

@@ -213,12 +213,32 @@ impl SpeakerTest {
         self.shared.lock().map(|s| s.clip_pos < s.clip.len()).unwrap_or(false)
     }
 
-    pub fn channel_names(&self) -> Vec<String> {
-        (0..self.channels).map(|c| channel_name(c, self.channels)).collect()
-    }
-
-    pub fn device(&self) -> Option<&str> {
-        self.error.is_none().then_some(self.device_name.as_str())
+    pub fn report(&self) -> crate::report::Section {
+        use crate::report::{Section, Status};
+        if let Some(e) = &self.error {
+            return Section { title: "Speakers", jp: "スピーカー", status: Status::Issue, lines: vec![format!("No audio output: {e}")] };
+        }
+        let answered = self.heard.iter().filter(|h| h.is_some()).count();
+        let bad = self.heard.iter().any(|h| *h == Some(false));
+        let status = if bad {
+            Status::Issue
+        } else if answered == 0 {
+            Status::NotTested
+        } else if answered == self.heard.len() {
+            Status::Pass
+        } else {
+            Status::InProgress
+        };
+        let mut lines = vec![format!("Output: {} ({} channels)", self.device_name, self.channels)];
+        for (c, h) in self.heard.iter().enumerate() {
+            let what = match h {
+                Some(true) => "heard ✔",
+                Some(false) => "NOT heard (or distorted)",
+                None => "not checked",
+            };
+            lines.push(format!("{}: {what}", channel_name(c, self.channels)));
+        }
+        Section { title: "Speakers", jp: "スピーカー", status, lines }
     }
 
     pub fn stop(&mut self) {

@@ -127,8 +127,38 @@ impl GamepadTest {
     pub fn right_ok(&self) -> bool {
         self.right.max_reach > 0.9
     }
-    pub fn drift(&self) -> (Option<Vec2>, Option<Vec2>) {
-        (self.left.drift, self.right.drift)
+
+    pub fn report(&self) -> crate::report::Section {
+        use crate::report::{Section, Status};
+        let done = BUTTONS.iter().filter(|(b, _)| self.tested.contains(b)).count();
+        let drift = self.left.drift.is_some() || self.right.drift.is_some();
+        let status = if drift {
+            Status::Issue
+        } else if self.name.is_none() || (done == 0 && self.left.max_reach < 0.05 && self.right.max_reach < 0.05) {
+            Status::NotTested
+        } else if done == BUTTONS.len() && self.left_ok() && self.right_ok() {
+            Status::Pass
+        } else {
+            Status::InProgress
+        };
+        let mut lines = Vec::new();
+        if let Some(n) = &self.name {
+            lines.push(format!("Controller: {n}"));
+        }
+        lines.push(format!("{done} / {} buttons work", BUTTONS.len()));
+        if done > 0 && done < BUTTONS.len() {
+            let missing: Vec<&str> = BUTTONS.iter().filter(|(b, _)| !self.tested.contains(b)).map(|(_, n)| *n).collect();
+            lines.push(format!("Not pressed yet: {}", missing.join(", ")));
+        }
+        for (side, w) in [("Left", &self.left), ("Right", &self.right)] {
+            let range = if w.max_reach > 0.9 { "full range" } else if w.max_reach > 0.05 { "not pushed to the edge yet" } else { "not tested" };
+            let drift = w.drift.map_or(String::new(), |v| format!(", DRIFT: rests {:.0}% off-centre", v.length() * 100.0));
+            lines.push(format!("{side} stick: {range}{drift}"));
+        }
+        if self.rumble_tried {
+            lines.push("Rumble: tried".into());
+        }
+        Section { title: "Gamepad", jp: "ゲームパッド", status, lines }
     }
 
     pub fn reset(&mut self) {

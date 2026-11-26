@@ -110,6 +110,39 @@ impl KeyboardTest {
         }
     }
 
+    pub fn report(&self) -> crate::report::Section {
+        use crate::report::{Section, Status};
+        let total = self.layout.caps.len();
+        let done = self.layout.caps.iter().filter(|c| self.tested.contains(&c.key)).count();
+        let worst = self.chatter.worst();
+        let status = if !worst.is_empty() {
+            Status::Issue
+        } else if done == 0 {
+            Status::NotTested
+        } else if done == total {
+            Status::Pass
+        } else {
+            Status::InProgress
+        };
+        let mut lines = vec![
+            format!("Layout: {} · {}", self.size.label(), self.style.label()),
+            format!("{done} / {total} keys work"),
+        ];
+        if done > 0 && done < total {
+            let missing: Vec<String> = self.layout.caps.iter().filter(|c| !self.tested.contains(&c.key)).map(|c| pretty(c.key)).collect();
+            let shown = missing.iter().take(15).cloned().collect::<Vec<_>>().join(", ");
+            let more = if missing.len() > 15 { format!(" (+{} more)", missing.len() - 15) } else { String::new() };
+            lines.push(format!("Not pressed yet: {shown}{more}"));
+        }
+        for (key, n) in worst {
+            lines.push(format!("Chatter: {} registered twice ×{n} (worn or dirty switch?)", pretty(key)));
+        }
+        if self.max_held >= 2 {
+            lines.push(format!("Rollover: up to {} keys registered at once", self.max_held));
+        }
+        Section { title: "Keyboard", jp: "キーボード", status, lines }
+    }
+
     /// Sound effects triggered since the last call (empty when SFX is off).
     pub fn take_sounds(&mut self) -> Vec<crate::sfx_audio::SfxSound> {
         std::mem::take(&mut self.sfx.sounds)
