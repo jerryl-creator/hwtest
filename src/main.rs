@@ -23,7 +23,7 @@ enum Tab {
 
 const TABS: &[(Tab, &str, &str, &str)] = &[
     (Tab::Keyboard, "⌨", "Keyboard", "キーボード"),
-    (Tab::Display, "🖥", "Display", "ディスプレイ"),
+    (Tab::Display, "★", "Display", "ディスプレイ"),
     (Tab::Audio, "🔊", "Audio", "オーディオ"),
 ];
 
@@ -133,10 +133,28 @@ impl App {
 impl eframe::App for App {
     /// Dev helper: with NYANSPECT_DEMO set, inject a few key presses so screenshots show the effects.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+        let t = raw.time.unwrap_or(0.0);
+        // NYANSPECT_DISPLAY_DEMO=<mode 0-2>: open the fullscreen display test and click two spots.
+        if let Some(mode) = std::env::var("NYANSPECT_DISPLAY_DEMO").ok().and_then(|v| v.parse::<usize>().ok()) {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static STEP: AtomicU8 = AtomicU8::new(0);
+            let step = STEP.load(Ordering::Relaxed);
+            let clicks = [(1.2, egui::pos2(300.0, 200.0)), (1.5, egui::pos2(620.0, 380.0))];
+            if step == 0 && t > 0.5 {
+                self.pixels.dev_start(mode);
+                STEP.store(1, Ordering::Relaxed);
+            } else if (1..=2).contains(&step) && t > clicks[step as usize - 1].0 {
+                let pos = clicks[step as usize - 1].1;
+                raw.events.push(egui::Event::PointerMoved(pos));
+                for pressed in [true, false] {
+                    raw.events.push(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
+                }
+                STEP.store(step + 1, Ordering::Relaxed);
+            }
+        }
         if std::env::var("NYANSPECT_DEMO").is_err() {
             return;
         }
-        let t = raw.time.unwrap_or(0.0);
         // (time, key, presses in the same frame): 2 presses at once simulates a chattering switch.
         let script = [
             (1.2, egui::Key::A, 1),
@@ -170,13 +188,13 @@ impl eframe::App for App {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = &ui.ctx().clone();
-        // Fullscreen pixel test takes over the whole window.
+        dev_screenshot(ctx, &mut self.tab);
+        // Fullscreen display test takes over the whole window.
         if self.pixels.running {
             self.pixels.fullscreen(ctx, ui);
             return;
         }
         self.bg.paint(ctx);
-        dev_screenshot(ctx, &mut self.tab);
 
         egui::Panel::top("tabs").show(ui, |ui| self.header(ui));
 
