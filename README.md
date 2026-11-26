@@ -31,10 +31,12 @@ Windows may show a SmartScreen warning because the file isn't code-signed: choos
 
 ### 1. Install Rust with rustup (required)
 
+HW Test supports **Windows 10/11 and Linux**. macOS isn't supported or tested.
+
 HW Test is built with **rustup**, the official Rust installer. Use it even if your Linux distro has its own
 `rust` package: only rustup can add the Windows target needed to build `hwtest.exe`.
 
-**Linux / macOS**
+**Linux**
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
