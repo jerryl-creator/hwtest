@@ -110,8 +110,18 @@ impl App {
     // ---------------------------------------------------------------- sidebar
 
     pub(crate) fn sidebar(&mut self, ui: &mut egui::Ui) {
+        // Scrolls when the window is too short for every row (small screens, high display scaling).
+        let height = ui.available_height();
+        egui::ScrollArea::vertical()
+            .auto_shrink(false)
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+            .show(ui, |ui| self.sidebar_rows(ui, height));
+    }
+
+    fn sidebar_rows(&mut self, ui: &mut egui::Ui, height: f32) {
         let compact = is_compact(ui.ctx());
         let w = ui.available_width();
+        let top = ui.cursor().top();
         ui.add_space(14.0);
 
         // Logo
@@ -159,7 +169,8 @@ impl App {
         }
 
         // Settings and language at the bottom.
-        let bottom = ui.available_height() - if compact { 96.0 } else { 52.0 };
+        let used = ui.cursor().top() - top;
+        let bottom = height - used - if compact { 96.0 } else { 52.0 };
         ui.add_space(bottom.max(10.0));
         if compact {
             self.nav_row(ui, Tab::Settings, theme::Icon::Settings, "Settings", true);

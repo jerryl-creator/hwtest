@@ -320,7 +320,12 @@ impl KeyboardTest {
                     ));
                 ui.add_space(6.0);
                 // recent keys as fading chips
+                // Only chips that fit: an overflowing row would stretch the card past the window.
                 for (name, t) in self.log.iter().take(6) {
+                    let text_w = ui.painter().layout_no_wrap(name.to_string(), egui::FontId::proportional(12.5), Color32::WHITE).size().x;
+                    if text_w + 16.0 + ui.spacing().item_spacing.x > ui.available_width() {
+                        break;
+                    }
                     let age = now - t;
                     let a = (1.0 - age / 6.0).clamp(0.35, 1.0);
                     egui::Frame::new()
@@ -449,11 +454,17 @@ impl KeyboardTest {
             let label_size = if cap.label.chars().count() > 3 { unit * 0.24 } else { unit * 0.32 };
             let txt = lerp_color(lerp_color(theme::TEXT_DIM, Color32::WHITE, ok), theme::INK, hold);
             // Japanese fonts draw "\" as a yen sign, so use the built-in monospace font for it.
-            let font = if cap.label == "\\" {
+            let mut font = if cap.label == "\\" {
                 FontId::monospace(label_size.max(9.5) * 1.1)
             } else {
                 FontId::proportional(label_size.max(9.5))
             };
+            // On small windows (high display scaling) shrink long labels to fit inside the key.
+            let label_w = painter.layout_no_wrap(cap.label.to_string(), font.clone(), txt).size().x;
+            let room = body.width() - 6.0;
+            if label_w > room && label_w > 0.0 {
+                font.size = (font.size * room / label_w).max(6.5);
+            }
             painter.text(body.center(), Align2::CENTER_CENTER, cap.label, font, txt);
         }
 
