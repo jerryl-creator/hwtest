@@ -5,26 +5,154 @@ use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind,
 use gilrs::{Axis, Button, GamepadId, Gilrs};
 use std::collections::HashSet;
 
-/// The buttons we test, with their label on an Xbox-style pad.
-pub const BUTTONS: [(Button, &str); 17] = [
-    (Button::South, "A"),
-    (Button::East, "B"),
-    (Button::West, "X"),
-    (Button::North, "Y"),
-    (Button::DPadUp, "D-pad ↑"),
-    (Button::DPadDown, "D-pad ↓"),
-    (Button::DPadLeft, "D-pad ←"),
-    (Button::DPadRight, "D-pad →"),
-    (Button::LeftTrigger, "LB"),
-    (Button::RightTrigger, "RB"),
-    (Button::LeftTrigger2, "LT"),
-    (Button::RightTrigger2, "RT"),
-    (Button::Select, "View"),
-    (Button::Start, "Menu"),
-    (Button::Mode, "Guide"),
-    (Button::LeftThumb, "L-stick click"),
-    (Button::RightThumb, "R-stick click"),
+/// The buttons we test. gilrs names them by position (South = bottom face button).
+pub const BUTTONS: [Button; 17] = [
+    Button::South,
+    Button::East,
+    Button::West,
+    Button::North,
+    Button::DPadUp,
+    Button::DPadDown,
+    Button::DPadLeft,
+    Button::DPadRight,
+    Button::LeftTrigger,
+    Button::RightTrigger,
+    Button::LeftTrigger2,
+    Button::RightTrigger2,
+    Button::Select,
+    Button::Start,
+    Button::Mode,
+    Button::LeftThumb,
+    Button::RightThumb,
 ];
+
+/// Which controller family to draw and label.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Style {
+    Xbox,
+    Ps3,
+    Ps4,
+    Ps5,
+    Nintendo,
+}
+
+impl Style {
+    pub fn name(self) -> &'static str {
+        match self {
+            Style::Xbox => "Xbox",
+            Style::Ps3 => "PlayStation 3",
+            Style::Ps4 => "PlayStation 4",
+            Style::Ps5 => "PlayStation 5",
+            Style::Nintendo => "Nintendo Switch",
+        }
+    }
+    fn is_ps(self) -> bool {
+        matches!(self, Style::Ps3 | Style::Ps4 | Style::Ps5)
+    }
+}
+
+/// The layout picker: Auto follows the connected controller.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Choice {
+    Auto,
+    Xbox,
+    PlayStation,
+    Nintendo,
+}
+
+/// Guess the controller family from its USB IDs, falling back to its name.
+pub fn detect(vendor: Option<u16>, product: Option<u16>, name: &str) -> Style {
+    let n = name.to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
+    if vendor == Some(0x054C) || has(&["playstation", "dualshock", "dualsense", "ps3", "ps4", "ps5", "sony"]) {
+        return match product {
+            Some(0x0268) => Style::Ps3,
+            Some(0x05C4 | 0x09CC | 0x0BA0) => Style::Ps4,
+            Some(0x0CE6 | 0x0DF2) => Style::Ps5,
+            _ if has(&["ps3", "playstation(r)3", "playstation 3", "dualshock 3", "sixaxis"]) => Style::Ps3,
+            _ if has(&["ps5", "dualsense"]) => Style::Ps5,
+            _ => Style::Ps4,
+        };
+    }
+    if vendor == Some(0x057E) || has(&["nintendo", "pro controller", "joy-con"]) {
+        return Style::Nintendo;
+    }
+    Style::Xbox
+}
+
+/// What a button is called on this kind of controller.
+pub fn label(style: Style, b: Button) -> &'static str {
+    use Button as B;
+    match (b, style) {
+        (B::DPadUp, _) => "D-pad ↑",
+        (B::DPadDown, _) => "D-pad ↓",
+        (B::DPadLeft, _) => "D-pad ←",
+        (B::DPadRight, _) => "D-pad →",
+        (B::South, Style::Xbox) => "A",
+        (B::East, Style::Xbox) => "B",
+        (B::West, Style::Xbox) => "X",
+        (B::North, Style::Xbox) => "Y",
+        (B::LeftTrigger, Style::Xbox) => "LB",
+        (B::RightTrigger, Style::Xbox) => "RB",
+        (B::LeftTrigger2, Style::Xbox) => "LT",
+        (B::RightTrigger2, Style::Xbox) => "RT",
+        (B::Select, Style::Xbox) => "View",
+        (B::Start, Style::Xbox) => "Menu",
+        (B::Mode, Style::Xbox) => "Guide",
+        (B::South, Style::Nintendo) => "B",
+        (B::East, Style::Nintendo) => "A",
+        (B::West, Style::Nintendo) => "Y",
+        (B::North, Style::Nintendo) => "X",
+        (B::LeftTrigger, Style::Nintendo) => "L",
+        (B::RightTrigger, Style::Nintendo) => "R",
+        (B::LeftTrigger2, Style::Nintendo) => "ZL",
+        (B::RightTrigger2, Style::Nintendo) => "ZR",
+        (B::Select, Style::Nintendo) => "−",
+        (B::Start, Style::Nintendo) => "+",
+        (B::Mode, Style::Nintendo) => "Home",
+        (B::South, _) => "Cross",
+        (B::East, _) => "Circle",
+        (B::West, _) => "Square",
+        (B::North, _) => "Triangle",
+        (B::LeftTrigger, _) => "L1",
+        (B::RightTrigger, _) => "R1",
+        (B::LeftTrigger2, _) => "L2",
+        (B::RightTrigger2, _) => "R2",
+        (B::Select, Style::Ps3) => "Select",
+        (B::Select, Style::Ps4) => "Share",
+        (B::Select, _) => "Create",
+        (B::Start, Style::Ps3) => "Start",
+        (B::Start, _) => "Options",
+        (B::Mode, _) => "PS",
+        (B::LeftThumb, s) if s.is_ps() => "L3",
+        (B::RightThumb, s) if s.is_ps() => "R3",
+        (B::LeftThumb, _) => "L-stick click",
+        (B::RightThumb, _) => "R-stick click",
+        _ => "?",
+    }
+}
+
+/// Draw a PlayStation face-button symbol (drawn, so it works with every font).
+fn ps_symbol(p: &egui::Painter, c: Pos2, size: f32, b: Button, col: Color32) {
+    let r = size * 0.28;
+    let st = Stroke::new((size * 0.07).max(1.5), col);
+    match b {
+        Button::North => {
+            let pts = vec![c + Vec2::new(0.0, -r * 1.05), c + Vec2::new(r * 1.0, r * 0.75), c + Vec2::new(-r * 1.0, r * 0.75)];
+            p.add(egui::Shape::closed_line(pts, st));
+        }
+        Button::East => {
+            p.circle_stroke(c, r, st);
+        }
+        Button::South => {
+            p.line_segment([c + Vec2::splat(-r), c + Vec2::splat(r)], st);
+            p.line_segment([c + Vec2::new(r, -r), c + Vec2::new(-r, r)], st);
+        }
+        _ => {
+            p.rect_stroke(Rect::from_center_size(c, Vec2::splat(r * 1.8)), 1.0, st, StrokeKind::Middle);
+        }
+    }
+}
 
 /// Values closer to the centre than this count as "at rest".
 const DEADZONE: f32 = 0.10;
@@ -70,6 +198,10 @@ pub struct GamepadTest {
     effect: Option<gilrs::ff::Effect>,
     /// Name of the pad being tested (for the report).
     pub name: Option<String>,
+    /// Family guessed from the connected pad.
+    detected: Style,
+    /// What the layout picker is set to.
+    pub choice: Choice,
 }
 
 impl Default for GamepadTest {
@@ -78,7 +210,17 @@ impl Default for GamepadTest {
             Ok(g) => (Some(g), None),
             Err(e) => (None, Some(e.to_string())),
         };
-        Self { gilrs, error, active: None, tested: HashSet::new(), left: Default::default(), right: Default::default(), rumble_tried: false, effect: None, name: None }
+        Self { gilrs, error, active: None, tested: HashSet::new(), left: Default::default(), right: Default::default(), rumble_tried: false, effect: None, name: None, detected: Style::Xbox, choice: dev_choice() }
+    }
+}
+
+/// NYANSPECT_PAD=ps3|ps4|ps5|xbox|nintendo forces a layout (for screenshots).
+fn dev_choice() -> Choice {
+    match std::env::var("NYANSPECT_PAD").as_deref() {
+        Ok("xbox") => Choice::Xbox,
+        Ok("ps3" | "ps4" | "ps5" | "playstation") => Choice::PlayStation,
+        Ok("nintendo") => Choice::Nintendo,
+        _ => Choice::Auto,
     }
 }
 
@@ -93,7 +235,9 @@ impl GamepadTest {
             // Follow whichever pad was used last.
             if self.active != Some(ev.id) {
                 self.active = Some(ev.id);
-                self.name = Some(g.gamepad(ev.id).name().to_string());
+                let pad = g.gamepad(ev.id);
+                self.name = Some(pad.name().to_string());
+                self.detected = detect(pad.vendor_id(), pad.product_id(), pad.name());
             }
             if let gilrs::EventType::ButtonPressed(b, _) = ev.event {
                 self.tested.insert(b);
@@ -108,6 +252,7 @@ impl GamepadTest {
             if let Some((id, pad)) = g.gamepads().next() {
                 self.active = Some(id);
                 self.name = Some(pad.name().to_string());
+                self.detected = detect(pad.vendor_id(), pad.product_id(), pad.name());
             }
         }
         if let Some(pad) = self.active.and_then(|id| g.connected_gamepad(id)) {
@@ -121,6 +266,21 @@ impl GamepadTest {
         }
     }
 
+    /// The layout being shown: the picker's choice, or what was detected.
+    pub fn style(&self) -> Style {
+        let forced = match std::env::var("NYANSPECT_PAD").as_deref() {
+            Ok("ps3") => Some(Style::Ps3),
+            Ok("ps5") => Some(Style::Ps5),
+            _ => None,
+        };
+        match self.choice {
+            Choice::Auto => self.detected,
+            Choice::Xbox => Style::Xbox,
+            Choice::Nintendo => Style::Nintendo,
+            Choice::PlayStation => forced.unwrap_or(if self.detected.is_ps() { self.detected } else { Style::Ps4 }),
+        }
+    }
+
     pub fn left_ok(&self) -> bool {
         self.left.max_reach > 0.9
     }
@@ -130,7 +290,8 @@ impl GamepadTest {
 
     pub fn report(&self) -> crate::report::Section {
         use crate::report::{Section, Status};
-        let done = BUTTONS.iter().filter(|(b, _)| self.tested.contains(b)).count();
+        let style = self.style();
+        let done = BUTTONS.iter().filter(|b| self.tested.contains(b)).count();
         let drift = self.left.drift.is_some() || self.right.drift.is_some();
         let status = if drift {
             Status::Issue
@@ -143,11 +304,11 @@ impl GamepadTest {
         };
         let mut lines = Vec::new();
         if let Some(n) = &self.name {
-            lines.push(format!("Controller: {n}"));
+            lines.push(format!("Controller: {n} ({} layout)", style.name()));
         }
         lines.push(format!("{done} / {} buttons work", BUTTONS.len()));
         if done > 0 && done < BUTTONS.len() {
-            let missing: Vec<&str> = BUTTONS.iter().filter(|(b, _)| !self.tested.contains(b)).map(|(_, n)| *n).collect();
+            let missing: Vec<&str> = BUTTONS.iter().filter(|b| !self.tested.contains(b)).map(|b| label(style, *b)).collect();
             lines.push(format!("Not pressed yet: {}", missing.join(", ")));
         }
         for (side, w) in [("Left", &self.left), ("Right", &self.right)] {
@@ -198,13 +359,14 @@ impl GamepadTest {
         let ff = pad.as_ref().is_some_and(|p| p.is_ff_supported());
         let pressed: HashSet<Button> = pad
             .as_ref()
-            .map(|p| BUTTONS.iter().map(|(b, _)| *b).filter(|b| p.is_pressed(*b)).collect())
+            .map(|p| BUTTONS.iter().copied().filter(|b| p.is_pressed(*b)).collect())
             .unwrap_or_default();
         let trig = |b: Button| pad.as_ref().and_then(|p| p.button_data(b)).map_or(0.0, |d| d.value());
         let (lt, rt) = (trig(Button::LeftTrigger2), trig(Button::RightTrigger2));
         let stick = |x: Axis, y: Axis| pad.as_ref().map_or(Vec2::ZERO, |p| Vec2::new(p.value(x), -p.value(y)));
         let (ls, rs) = (stick(Axis::LeftStickX, Axis::LeftStickY), stick(Axis::RightStickX, Axis::RightStickY));
-        let done = BUTTONS.iter().filter(|(b, _)| self.tested.contains(b)).count();
+        let done = BUTTONS.iter().filter(|b| self.tested.contains(b)).count();
+        let style = self.style();
 
         if self.left.drift.is_some() || self.right.drift.is_some() {
             mascot.say("A stick isn't centring… stick drift! (；ω；)");
@@ -239,15 +401,33 @@ impl GamepadTest {
                 });
             });
 
-            let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 380.0), Sense::hover());
-            self.draw_pad(ui, area, &pressed, lt, rt, ls, rs, connected, now);
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Layout").size(13.0).color(theme::TEXT_DIM));
+                let opts = [
+                    (Choice::Auto, "Auto", "Follow the connected controller"),
+                    (Choice::Xbox, "Xbox", "A B X Y, LB / RB, LT / RT"),
+                    (Choice::PlayStation, "PlayStation", "Cross Circle Square Triangle, L1 / R1, L2 / R2"),
+                    (Choice::Nintendo, "Nintendo", "B A Y X, L / R, ZL / ZR"),
+                ];
+                theme::segmented(ui, "gp-layout", &opts, &mut self.choice);
+                ui.add_space(8.0);
+                let note = if self.choice == Choice::Auto {
+                    if connected { format!("Detected: {}", style.name()) } else { "Detects your controller when you plug it in".into() }
+                } else {
+                    format!("Showing: {}", style.name())
+                };
+                ui.label(egui::RichText::new(note).size(12.5).color(theme::TEXT_DIM));
+            });
+
+            let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 370.0), Sense::hover());
+            self.draw_pad(ui, area, style, &pressed, lt, rt, ls, rs, connected, now);
 
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(format!("{done} / {} buttons", BUTTONS.len())).font(theme::bold(13.0)).color(Color32::WHITE));
                 ui.add_space(6.0);
-                for (b, name) in BUTTONS {
-                    chip(ui, name, self.tested.contains(&b));
+                for b in BUTTONS {
+                    chip(ui, label(style, b), self.tested.contains(&b));
                 }
                 chip(ui, "Left stick full range", self.left_ok());
                 chip(ui, "Right stick full range", self.right_ok());
@@ -266,8 +446,8 @@ impl GamepadTest {
             }
             ui.label(
                 egui::RichText::new(
-                    "Labels follow an Xbox pad (PlayStation: A = Cross, B = Circle, X = Square, Y = Triangle). \
-                     Let go of both sticks to check for drift. The Guide button may be grabbed by Steam or the Xbox Game Bar.",
+                    "The layout follows your controller; pick another above if a third-party pad looks wrong. \
+                     Let go of both sticks to check for drift. The Guide / PS / Home button may be grabbed by Steam or the Xbox Game Bar.",
                 )
                 .size(12.0)
                 .color(theme::TEXT_DIM),
@@ -276,7 +456,7 @@ impl GamepadTest {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_pad(&self, ui: &egui::Ui, area: Rect, pressed: &HashSet<Button>, lt: f32, rt: f32, ls: Vec2, rs: Vec2, connected: bool, now: f64) {
+    fn draw_pad(&self, ui: &egui::Ui, area: Rect, style: Style, pressed: &HashSet<Button>, lt: f32, rt: f32, ls: Vec2, rs: Vec2, connected: bool, now: f64) {
         let p = ui.painter();
         let ctx = ui.ctx();
         let c = area.center() + Vec2::new(0.0, 10.0);
@@ -292,7 +472,7 @@ impl GamepadTest {
         theme::vgradient(p, body, 90.0 * s, body_col.0, body_col.1);
         p.rect_stroke(body, 90.0 * s, Stroke::new(1.5, alpha(Color32::WHITE, 0.18)), StrokeKind::Inside);
         if !connected {
-            p.text(c + Vec2::new(0.0, -8.0 * s), Align2::CENTER_CENTER, "No controller", theme::bold(18.0), alpha(theme::TEXT_DIM, 0.9));
+            p.text(c + Vec2::new(0.0, 135.0 * s), Align2::CENTER_CENTER, "No controller", theme::bold(18.0), alpha(theme::TEXT_DIM, 0.9));
         }
 
         // A key-like part: held = white glow, tested = silver, else dark.
@@ -308,21 +488,36 @@ impl GamepadTest {
             p.rect_stroke(rect, r, Stroke::new(1.0, alpha(Color32::WHITE, 0.2 + 0.4 * ok)), StrokeKind::Inside);
             let txt = lerp_color(lerp_color(theme::TEXT_DIM, Color32::WHITE, ok), theme::INK, held);
             p.text(rect.center(), Align2::CENTER_CENTER, label, theme::bold((13.0 * s).max(10.0)), txt);
+            txt
+        };
+        let name = |b: Button| label(style, b);
+
+        // Where things go. PlayStation pads have the D-pad up top and both sticks low and
+        // side by side; Xbox and Switch pads have the left stick up top and the D-pad low.
+        let (left_stick, dp, right_stick) = if style.is_ps() {
+            (c + Vec2::new(-80.0 * s, 50.0 * s), c + Vec2::new(-165.0 * s, -30.0 * s), c + Vec2::new(80.0 * s, 50.0 * s))
+        } else {
+            (c + Vec2::new(-165.0 * s, -30.0 * s), c + Vec2::new(-80.0 * s, 50.0 * s), c + Vec2::new(80.0 * s, 50.0 * s))
         };
 
         // Face buttons (right) in a diamond.
         let face = c + Vec2::new(165.0 * s, -30.0 * s);
         let fb = 34.0 * s;
-        for (b, label, off) in [
-            (Button::North, "Y", Vec2::new(0.0, -38.0)),
-            (Button::South, "A", Vec2::new(0.0, 38.0)),
-            (Button::West, "X", Vec2::new(-38.0, 0.0)),
-            (Button::East, "B", Vec2::new(38.0, 0.0)),
+        for (b, off) in [
+            (Button::North, Vec2::new(0.0, -38.0)),
+            (Button::South, Vec2::new(0.0, 38.0)),
+            (Button::West, Vec2::new(-38.0, 0.0)),
+            (Button::East, Vec2::new(38.0, 0.0)),
         ] {
-            part(Rect::from_center_size(face + off * s, Vec2::splat(fb)), fb / 2.0, b, label);
+            let rect = Rect::from_center_size(face + off * s, Vec2::splat(fb));
+            if style.is_ps() {
+                let col = part(rect, fb / 2.0, b, "");
+                ps_symbol(p, rect.center(), fb, b, col);
+            } else {
+                part(rect, fb / 2.0, b, name(b));
+            }
         }
-        // D-pad (left).
-        let dp = c + Vec2::new(-80.0 * s, 50.0 * s);
+        // D-pad.
         let db = 28.0 * s;
         for (b, label, off) in [
             (Button::DPadUp, "↑", Vec2::new(0.0, -30.0)),
@@ -333,14 +528,39 @@ impl GamepadTest {
             part(Rect::from_center_size(dp + off * s, Vec2::splat(db)), 5.0, b, label);
         }
         // Small centre buttons.
-        part(Rect::from_center_size(c + Vec2::new(-45.0 * s, -45.0 * s), Vec2::new(40.0 * s, 20.0 * s)), 10.0 * s, Button::Select, "View");
-        part(Rect::from_center_size(c + Vec2::new(45.0 * s, -45.0 * s), Vec2::new(40.0 * s, 20.0 * s)), 10.0 * s, Button::Start, "Menu");
-        part(Rect::from_center_size(c + Vec2::new(0.0, -78.0 * s), Vec2::splat(30.0 * s)), 15.0 * s, Button::Mode, "⌂");
+        let small = |x: f32, y: f32, w: f32, b: Button| {
+            part(Rect::from_center_size(c + Vec2::new(x * s, y * s), Vec2::new(w * s, 20.0 * s)), 10.0 * s, b, name(b));
+        };
+        match style {
+            Style::Ps4 | Style::Ps5 => {
+                // Touchpad (drawn for the look; it isn't testable here).
+                let pad = Rect::from_center_size(c + Vec2::new(0.0, -58.0 * s), Vec2::new(150.0 * s, 66.0 * s));
+                theme::vgradient(p, pad, 10.0 * s, Color32::from_rgb(40, 40, 44), Color32::from_rgb(26, 26, 29));
+                p.rect_stroke(pad, 10.0 * s, Stroke::new(1.0, alpha(Color32::WHITE, 0.15)), StrokeKind::Inside);
+                p.text(pad.center(), Align2::CENTER_CENTER, "touchpad", egui::FontId::proportional((11.0 * s).max(9.0)), alpha(theme::TEXT_DIM, 0.7));
+                small(-112.0, -74.0, 56.0, Button::Select);
+                small(112.0, -74.0, 62.0, Button::Start);
+                part(Rect::from_center_size(c + Vec2::new(0.0, 14.0 * s), Vec2::splat(30.0 * s)), 15.0 * s, Button::Mode, "PS");
+            }
+            Style::Ps3 => {
+                small(-48.0, -45.0, 56.0, Button::Select);
+                small(48.0, -45.0, 50.0, Button::Start);
+                part(Rect::from_center_size(c + Vec2::new(0.0, -6.0 * s), Vec2::splat(30.0 * s)), 15.0 * s, Button::Mode, "PS");
+            }
+            Style::Nintendo => {
+                small(-45.0, -62.0, 26.0, Button::Select);
+                small(45.0, -62.0, 26.0, Button::Start);
+                part(Rect::from_center_size(c + Vec2::new(30.0 * s, -18.0 * s), Vec2::splat(26.0 * s)), 13.0 * s, Button::Mode, "⌂");
+            }
+            Style::Xbox => {
+                small(-45.0, -45.0, 40.0, Button::Select);
+                small(45.0, -45.0, 40.0, Button::Start);
+                part(Rect::from_center_size(c + Vec2::new(0.0, -78.0 * s), Vec2::splat(30.0 * s)), 15.0 * s, Button::Mode, "⌂");
+            }
+        }
         // Bumpers and trigger bars on top.
-        for (side, bump, bl, trig, tl, value) in [
-            (-1.0f32, Button::LeftTrigger, "LB", Button::LeftTrigger2, "LT", lt),
-            (1.0, Button::RightTrigger, "RB", Button::RightTrigger2, "RT", rt),
-        ] {
+        for (side, bump, trig, value) in [(-1.0f32, Button::LeftTrigger, Button::LeftTrigger2, lt), (1.0, Button::RightTrigger, Button::RightTrigger2, rt)] {
+            let (bl, tl) = (name(bump), name(trig));
             let x = c.x + side * 170.0 * s;
             part(Rect::from_center_size(Pos2::new(x, c.y - 118.0 * s), Vec2::new(110.0 * s, 22.0 * s)), 11.0 * s, bump, bl);
             let bar = Rect::from_center_size(Pos2::new(x, c.y - 152.0 * s), Vec2::new(110.0 * s, 22.0 * s));
@@ -356,8 +576,8 @@ impl GamepadTest {
         }
         // Sticks: outer ring, deadzone circle, live dot, and a ring that lights when clicked.
         for (centre, v, watch, click) in [
-            (c + Vec2::new(-165.0 * s, -30.0 * s), ls, &self.left, Button::LeftThumb),
-            (c + Vec2::new(80.0 * s, 50.0 * s), rs, &self.right, Button::RightThumb),
+            (left_stick, ls, &self.left, Button::LeftThumb),
+            (right_stick, rs, &self.right, Button::RightThumb),
         ] {
             let r = 42.0 * s;
             let clicked = pressed.contains(&click);
@@ -395,6 +615,28 @@ fn chip(ui: &mut egui::Ui, label: &str, ok: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detects_controller_families() {
+        assert_eq!(detect(Some(0x054C), Some(0x0268), "Sony PLAYSTATION(R)3 Controller"), Style::Ps3);
+        assert_eq!(detect(Some(0x054C), Some(0x09CC), "Wireless Controller"), Style::Ps4);
+        assert_eq!(detect(Some(0x054C), Some(0x0CE6), "DualSense Wireless Controller"), Style::Ps5);
+        assert_eq!(detect(None, None, "PS3 Controller"), Style::Ps3);
+        assert_eq!(detect(Some(0x045E), Some(0x0B12), "Xbox Series X Controller"), Style::Xbox);
+        assert_eq!(detect(Some(0x057E), Some(0x2009), "Pro Controller"), Style::Nintendo);
+        assert_eq!(detect(Some(0x046D), Some(0xC21D), "Logitech Gamepad F310"), Style::Xbox);
+    }
+
+    #[test]
+    fn every_button_has_a_label_in_every_style() {
+        for st in [Style::Xbox, Style::Ps3, Style::Ps4, Style::Ps5, Style::Nintendo] {
+            for b in BUTTONS {
+                assert_ne!(label(st, b), "?", "{st:?} {b:?}");
+            }
+        }
+        assert_eq!(label(Style::Ps3, Button::Select), "Select");
+        assert_eq!(label(Style::Ps4, Button::Start), "Options");
+    }
 
     #[test]
     fn centred_stick_has_no_drift() {

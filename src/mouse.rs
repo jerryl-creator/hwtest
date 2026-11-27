@@ -7,6 +7,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// Two presses of the same button closer than this are a faulty switch, not a person.
 /// Nobody clicking slowly gets near it, so there are no false alarms.
 const CLICK_CHATTER_SECS: f64 = 0.05;
+/// Slow clicks the double-click test asks for.
+const DC_TARGET: u32 = 20;
 /// How many recent gaps between clicks to show per button.
 const GAPS_SHOWN: usize = 6;
 /// Presses of the same button closer than this form a streak (double, triple…). Windows' default double-click time.
@@ -57,6 +59,11 @@ pub struct MouseTest {
     /// Button of the most recent click, for the pop-up in the drawing area.
     last_button: Option<usize>,
     pub double_clicked: bool,
+    /// Double-click issue test: (clicks, chatter) per button when it started.
+    dc_test: Option<([u32; 5], [u32; 5])>,
+    /// When the last unwanted double-click happened (for the flash).
+    chatter_at: f64,
+    dev_dc: bool,
     trail: VecDeque<(Pos2, f64)>,
     /// Height the page may fill (set by the app each frame).
     pub fit_height: f32,
@@ -112,6 +119,7 @@ impl MouseTest {
         }
         if self.last_press[i].replace(now).is_some_and(|prev| now - prev < CLICK_CHATTER_SECS) {
             self.chatter[i] += 1;
+            self.chatter_at = now;
             return;
         }
         self.clicks[i] += 1;
@@ -122,6 +130,17 @@ impl MouseTest {
         if i == 0 && self.streak[i] >= 2 {
             self.double_clicked = true;
         }
+    }
+
+    /// Double-click test results per button since it started: (clicks, unwanted doubles).
+    fn dc_counts(&self) -> Option<[(u32, u32); 5]> {
+        let (c0, h0) = self.dc_test?;
+        Some(std::array::from_fn(|i| (self.clicks[i] - c0[i], self.chatter[i] - h0[i])))
+    }
+
+    fn start_dc_test(&mut self) {
+        self.dc_test = Some((self.clicks, self.chatter));
+        self.last_button = None;
     }
 
     pub fn report(&self) -> crate::report::Section {
@@ -162,6 +181,15 @@ impl MouseTest {
             lines.push(format!("Shortest gap between clicks: {} (under 50 ms = faulty switch)", shortest.join(", ")));
         }
         lines.push(format!("Double-click: {}", if self.double_clicked { "works" } else { "not tested" }));
+        if let Some(dc) = self.dc_counts() {
+            let parts: Vec<String> = (0..5)
+                .filter(|i| dc[*i].0 + dc[*i].1 > 0)
+                .map(|i| format!("{} {} clicks, {} unwanted", BUTTONS[i].1, dc[i].0, dc[i].1))
+                .collect();
+            if !parts.is_empty() {
+                lines.push(format!("Double-click test: {}", parts.join("; ")));
+            }
+        }
         if !chatter.is_empty() {
             lines.push(format!("Click chatter (one click counted twice): {}", chatter.join(", ")));
         }
@@ -178,7 +206,22 @@ impl MouseTest {
         let n_tested = self.tested.iter().filter(|t| **t).count();
         let worst = (0..5).filter(|i| self.chatter[*i] > 0).max_by_key(|i| self.chatter[*i]);
 
-        if let Some(i) = worst {
+        if !self.dev_dc {
+            self.dev_dc = true;
+            if std::env::var("NYANSPECT_DC_TEST").is_ok() {
+                self.start_dc_test();
+            }
+        }
+        let dc = self.dc_counts();
+        if let Some(dc) = dc {
+            if dc.iter().any(|(_, bad)| *bad > 0) {
+                mascot.say("Caught an unwanted double-click! (；ω；)");
+            } else if dc.iter().any(|(n, _)| *n >= DC_TARGET) {
+                mascot.say("No sneaky double-clicks~ that switch is healthy ♪");
+            } else {
+                mascot.say("Click slowly~ I'm watching for sneaky double-clicks");
+            }
+        } else if let Some(i) = worst {
             mascot.say(format!("{} clicked twice by itself… worn switch? (；ω；)", BUTTONS[i].1));
         } else if n_tested == 0 {
             mascot.say("Click every mouse button and scroll~ ♪");
@@ -194,6 +237,18 @@ impl MouseTest {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if theme::fancy_button(ui, "↺ Reset", Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
                         self.reset();
+                    }
+                    ui.add_space(6.0);
+                    let (label, c1) = if self.dc_test.is_some() { ("■ Stop test", theme::LIGHT) } else { ("Double-click test", theme::ACCENT) };
+                    if theme::fancy_button(ui, label, Vec2::new(170.0, 32.0), c1, theme::SILVER, true)
+                        .on_hover_text("Click slowly 20 times; any unwanted double-click is caught")
+                        .clicked()
+                    {
+                        if self.dc_test.is_some() {
+                            self.dc_test = None;
+                        } else {
+                            self.start_dc_test();
+                        }
                     }
                 });
             });
@@ -236,6 +291,9 @@ impl MouseTest {
                     }
                     y += 24.0;
                 }
+                if let Some(dc) = dc {
+                    self.draw_dc_test(&p, pad, &dc, now);
+                } else {
                 for w in self.trail.iter().collect::<Vec<_>>().windows(2) {
                     let a = (1.0 - (now - w[1].1) / TRAIL_SECS) as f32;
                     p.line_segment([w[0].0, w[1].0], Stroke::new(1.0 + 3.0 * a, alpha(Color32::WHITE, a)));
@@ -264,6 +322,7 @@ impl MouseTest {
                             alpha(Color32::WHITE, a),
                         );
                     }
+                }
                 }
             });
 
@@ -325,6 +384,63 @@ impl MouseTest {
         });
     }
 
+    /// The double-click test target: a progress ring for the button being tested and a row per button.
+    fn draw_dc_test(&self, p: &egui::Painter, pad: Rect, dc: &[(u32, u32); 5], now: f64) {
+        p.text(
+            pad.center_top() + Vec2::new(0.0, 34.0),
+            Align2::CENTER_CENTER,
+            format!("Double-click test: click slowly, about once a second, {DC_TARGET} times"),
+            theme::bold(18.0),
+            Color32::WHITE,
+        );
+        p.text(
+            pad.center_top() + Vec2::new(0.0, 60.0),
+            Align2::CENTER_CENTER,
+            "Use the button you want to check. A worn switch sometimes clicks twice by itself.",
+            egui::FontId::proportional(13.0),
+            theme::TEXT_DIM,
+        );
+        let focus = self.last_button.unwrap_or(0);
+        let (n, bad) = dc[focus];
+        let r = (pad.height() * 0.2).clamp(60.0, 110.0);
+        let c = pad.center() + Vec2::new(0.0, -r * 0.15);
+        let flash = (1.0 - (now - self.chatter_at) / 1.0).clamp(0.0, 1.0) as f32;
+        let flash = if self.dc_test.is_some() && bad > 0 { flash } else { 0.0 };
+        p.circle_filled(c, r, lerp_color(Color32::from_rgba_unmultiplied(16, 16, 19, 230), theme::GLINT, flash * 0.6));
+        p.circle_stroke(c, r, Stroke::new(8.0, alpha(Color32::WHITE, 0.08)));
+        let frac = (n as f32 / DC_TARGET as f32).min(1.0);
+        if frac > 0.0 {
+            let steps = 90;
+            let pts: Vec<Pos2> = (0..=steps)
+                .map(|k| {
+                    let a = -std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU * frac * k as f32 / steps as f32;
+                    c + Vec2::new(a.cos(), a.sin()) * r
+                })
+                .collect();
+            p.add(egui::Shape::line(pts, Stroke::new(8.0, if bad > 0 { theme::GLINT } else { Color32::WHITE })));
+        }
+        p.text(c + Vec2::new(0.0, -8.0), Align2::CENTER_CENTER, format!("{n} / {DC_TARGET}"), theme::bold(34.0), Color32::WHITE);
+        p.text(c + Vec2::new(0.0, 26.0), Align2::CENTER_CENTER, BUTTONS[focus].1, theme::bold(14.0), theme::TEXT_DIM);
+        if flash > 0.0 {
+            p.text(c + Vec2::new(0.0, -r - 22.0), Align2::CENTER_CENTER, "Unwanted double-click!", theme::bold(20.0), alpha(Color32::WHITE, flash));
+        }
+
+        // One line per button that has been used during the test.
+        let mut y = c.y + r + 30.0;
+        for i in (0..5).filter(|i| dc[*i].0 + dc[*i].1 > 0) {
+            let (n, bad) = dc[i];
+            let name = BUTTONS[i].1;
+            let (text, col) = match (bad, n >= DC_TARGET) {
+                (0, true) => (format!("✔ {name}: no unwanted double-clicks in {n} clicks"), Color32::WHITE),
+                (0, false) => (format!("{name}: {n} / {DC_TARGET} clicks, none unwanted so far"), theme::TEXT),
+                (b, true) => (format!("⚠ {name}: {} in {}: the switch may be wearing out", plural(b, "unwanted double-click"), plural(n, "click")), theme::GLINT),
+                (b, false) => (format!("⚠ {name}: {} in {} so far", plural(b, "unwanted double-click"), plural(n, "click")), theme::GLINT),
+            };
+            p.text(Pos2::new(c.x, y), Align2::CENTER_CENTER, text, theme::bold(14.0), col);
+            y += 22.0;
+        }
+    }
+
     fn draw_mouse(&self, ui: &egui::Ui, area: Rect, now: f64) {
         let p = ui.painter();
         let ctx = ui.ctx();
@@ -378,6 +494,10 @@ impl MouseTest {
         p.text(fwd.left_center() + Vec2::new(-6.0, 0.0), Align2::RIGHT_CENTER, "Fwd", egui::FontId::proportional(11.0), theme::TEXT_DIM);
         p.text(back.left_center() + Vec2::new(-6.0, 0.0), Align2::RIGHT_CENTER, "Back", egui::FontId::proportional(11.0), theme::TEXT_DIM);
     }
+}
+
+fn plural(n: u32, word: &str) -> String {
+    if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
 }
 
 /// A gap between clicks, rounded honestly: input arrives once per frame (~16 ms).
@@ -449,6 +569,18 @@ mod tests {
         assert_eq!(fmt_gap(0.0), "<16 ms");
         assert_eq!(fmt_gap(0.812), "~812 ms");
         assert_eq!(fmt_gap(2.0), "2.0 s");
+    }
+
+    #[test]
+    fn double_click_test_counts_from_its_start() {
+        let mut m = MouseTest::default();
+        m.press(0, 1.0);
+        m.press(0, 1.01); // chatter before the test: not counted in it
+        m.start_dc_test();
+        m.press(0, 3.0);
+        m.press(0, 4.0);
+        m.press(0, 4.02); // unwanted double-click during the test
+        assert_eq!(m.dc_counts().unwrap()[0], (2, 1));
     }
 
     #[test]
