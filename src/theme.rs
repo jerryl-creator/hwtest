@@ -132,12 +132,69 @@ pub fn apply_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) -> bool {
     }
     // Built-in Hack font as the last fallback: it has arrows (← ↑ → ↓ ⇄) that some systems lack.
     prop.push("Hack".into());
+    // The bold family gets its own copies of the shared fallback fonts, because a font's
+    // baseline correction depends on which font leads the family.
     let mut bold_family = bold_names;
-    bold_family.extend(defaults);
-    bold_family.push("Hack".into());
-    fonts.families.insert(FontFamily::Name("bold".into()), bold_family);
+    for name in defaults.iter().chain(std::iter::once(&"Hack".to_string())) {
+        if let Some(data) = fonts.font_data.get(name).cloned() {
+            let copy = format!("bold:{name}");
+            fonts.font_data.insert(copy.clone(), data);
+            bold_family.push(copy);
+        }
+    }
+    fonts.families.insert(FontFamily::Name("bold".into()), bold_family.clone());
+    let regular_family = fonts.families[&FontFamily::Proportional].clone();
+    align_baselines(&mut fonts, &regular_family, have_cjk);
+    align_baselines(&mut fonts, &bold_family, have_cjk);
     ctx.set_fonts(fonts);
     have_cjk
+}
+
+/// A font's vertical metrics in ems: ascent, descent (negative), line gap, cap height.
+fn vmetrics(data: &egui::FontData) -> Option<[f32; 4]> {
+    use skrifa::MetadataProvider;
+    let font = skrifa::FontRef::from_index((*data.font).as_ref(), data.index).ok()?;
+    let m = font.metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
+    let em = f32::from(m.units_per_em);
+    if em <= 0.0 {
+        return None;
+    }
+    let cap = m.cap_height.filter(|c| *c > 0.0).unwrap_or(0.7 * em);
+    Some([m.ascent / em, m.descent / em, m.leading / em, cap / em])
+}
+
+/// How far below the row's middle Noto Sans CJK puts the middle of a capital letter, in ems
+/// (ascent 1.16, descent -0.288, cap height 0.733). The app's look was tuned with it.
+const NOTO_CAP_CENTRE: f32 = 1.16 - 0.733 / 2.0 - (1.16 + 0.288) / 2.0;
+
+/// Shift each font in a family so all of them share one baseline (egui centres fallback
+/// glyphs by height, which leaves mixed fonts at different heights: "简" from Microsoft
+/// YaHei sat lower than Yu Gothic text on Windows). With `centre`, also shift the leading
+/// font so capitals sit in boxes the way Noto Sans CJK's do.
+/// Returns each font's offset in ems (positive = down).
+fn align_baselines(fonts: &mut egui::FontDefinitions, family: &[String], centre: bool) -> Vec<f32> {
+    let metrics: Vec<Option<[f32; 4]>> = family.iter().map(|n| fonts.font_data.get(n).and_then(|d| vmetrics(d))).collect();
+    let Some(Some(lead)) = metrics.first().copied() else { return Vec::new() };
+    let offsets = baseline_offsets(lead, &metrics, centre);
+    for (name, off) in family.iter().zip(&offsets) {
+        if let Some(data) = fonts.font_data.get_mut(name) {
+            std::sync::Arc::make_mut(data).tweak.y_offset_factor = *off;
+        }
+    }
+    offsets
+}
+
+fn baseline_offsets(lead: [f32; 4], metrics: &[Option<[f32; 4]>], centre: bool) -> Vec<f32> {
+    let height = |m: [f32; 4]| m[0] - m[1] + m[2];
+    let lead_off = if centre { NOTO_CAP_CENTRE - (lead[0] - lead[3] / 2.0 - height(lead) / 2.0) } else { 0.0 };
+    metrics
+        .iter()
+        .map(|m| match m {
+            // egui draws a fallback glyph at its own ascent, centred on the lead font's height.
+            Some(f) => lead[0] - f[0] - 0.5 * (height(lead) - height(*f)) + lead_off,
+            None => lead_off,
+        })
+        .collect()
 }
 
 /// Fonts and the monochrome style. Returns true if a CJK font was found.
@@ -324,7 +381,7 @@ pub fn fancy_button(ui: &mut Ui, label: &str, size: Vec2, c1: Color32, c2: Color
         Align2::CENTER_CENTER,
         label,
         bold(15.0),
-        if !enabled { TEXT_DIM } else if luma(c1) + luma(c2) > 330.0 { INK } else { Color32::WHITE },
+        if !enabled { TEXT_DIM } else if luma(c1) + luma(c2) > 300.0 { INK } else { Color32::WHITE },
     );
     if enabled {
         resp.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -817,6 +874,29 @@ impl Mascot {
 #[cfg(test)]
 mod tests {
     use super::Mascot;
+
+    /// Where egui puts a glyph's baseline below the row top (same formula as epaint's layout).
+    fn baseline(lead: [f32; 4], face: [f32; 4], offset: f32) -> f32 {
+        let h = |m: [f32; 4]| m[0] - m[1] + m[2];
+        face[0] + 0.5 * (h(lead) - h(face)) + offset
+    }
+
+    #[test]
+    fn mixed_fonts_share_one_baseline() {
+        // Roughly Yu Gothic, Microsoft YaHei, egui's Ubuntu and Noto Sans CJK.
+        let yu = [1.07, -0.26, 0.0, 0.72];
+        let others = [[1.06, -0.29, 0.0, 0.71], [0.93, -0.19, 0.03, 0.69], [1.16, -0.288, 0.0, 0.733]];
+        let mut all = vec![Some(yu)];
+        all.extend(others.iter().map(|m| Some(*m)));
+        let off = super::baseline_offsets(yu, &all, true);
+        let lead = baseline(yu, yu, off[0]);
+        for (m, o) in others.iter().zip(&off[1..]) {
+            assert!((baseline(yu, *m, *o) - lead).abs() < 1e-5);
+        }
+        // Noto leading its own family needs no shift.
+        let noto = others[2];
+        assert!(super::baseline_offsets(noto, &[Some(noto)], true)[0].abs() < 1e-5);
+    }
 
     /// The Audio tab bug: the speaker test and the mic test both call `say` every frame.
     /// The bubble must settle on one message instead of restarting its typing each frame.

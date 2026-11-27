@@ -2324,6 +2324,7 @@ dependencies = [
  "memmap2",
  "nokhwa",
  "serde",
+ "skrifa",
  "sys-locale",
  "v4l",
  "winresource",

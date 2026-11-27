@@ -5,6 +5,8 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
+# Same version egui uses: reads font metrics so mixed fonts share one baseline.
+skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 cpal = "0.18.2"
 dirs = "7.0.0"
 eframe = { version = "0.37.0", features = ["glow", "persistence"] }
