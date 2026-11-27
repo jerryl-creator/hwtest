@@ -189,16 +189,14 @@ impl eframe::App for App {
                     }
                 }
             };
+            // Right twice in one frame (chatter), then two real left clicks 0.3 s apart (a double-click).
             if step == 0 && t > 1.3 {
-                click(egui::PointerButton::Primary, 1, &mut raw.events);
-                DONE.store(1, Ordering::Relaxed);
-            } else if step == 1 && t > 1.6 {
-                click(egui::PointerButton::Primary, 2, &mut raw.events);
-                raw.events.push(egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Line, delta: egui::vec2(0.0, 1.0), modifiers: Default::default(), phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
-                DONE.store(2, Ordering::Relaxed);
-            } else if step == 2 && t > 1.9 {
                 click(egui::PointerButton::Secondary, 2, &mut raw.events);
-                DONE.store(3, Ordering::Relaxed);
+                raw.events.push(egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Line, delta: egui::vec2(0.0, 1.0), modifiers: Default::default(), phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
+                DONE.store(1, Ordering::Relaxed);
+            } else if (step == 1 && t > 1.6) || (step == 2 && t > 1.9) {
+                click(egui::PointerButton::Primary, 1, &mut raw.events);
+                DONE.store(step + 1, Ordering::Relaxed);
             }
         }
         if std::env::var("NYANSPECT_DEMO").is_err() {

@@ -6,6 +6,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Two presses of the same button closer than this are a faulty switch, not a person.
 const CLICK_CHATTER_SECS: f64 = 0.04;
+/// Presses of the same button closer than this form a streak (double, triple…). Windows' default double-click time.
+const STREAK_SECS: f64 = 0.5;
 /// How long the pointer trail stays visible.
 const TRAIL_SECS: f64 = 2.5;
 
@@ -40,8 +42,14 @@ pub struct MouseTest {
     last_press: [Option<f64>; 5],
     /// Click chatter per button in `BUTTONS`: how many times one click registered as two.
     pub chatter: [u32; 5],
+    /// Real clicks per button (chatter not included).
+    pub clicks: [u32; 5],
+    /// Current run of quick clicks per button, and when its last click happened.
+    streak: [u32; 5],
+    streak_at: [f64; 5],
+    /// Button of the most recent click, for the pop-up in the drawing area.
+    last_button: Option<usize>,
     pub double_clicked: bool,
-    double_at: f64,
     trail: VecDeque<(Pos2, f64)>,
     /// Height the page may fill (set by the app each frame).
     pub fit_height: f32,
@@ -57,9 +65,7 @@ impl MouseTest {
                     let Some(i) = idx(button) else { continue };
                     self.down[i] = true;
                     self.tested[i] = true;
-                    if self.last_press[i].replace(now).is_some_and(|prev| now - prev < CLICK_CHATTER_SECS) {
-                        self.chatter[i] += 1;
-                    }
+                    self.press(i, now);
                 }
                 egui::Event::PointerButton { button, pressed: false, .. } => {
                     if let Some(i) = idx(button) {
@@ -83,6 +89,23 @@ impl MouseTest {
                 egui::Event::WindowFocused(false) | egui::Event::PointerGone => self.down = [false; 5],
                 _ => {}
             }
+        }
+    }
+
+    /// Count one press of `BUTTONS[i]`. Only the same button pressed again quickly
+    /// continues a streak, so Right then Left is never a double-click.
+    fn press(&mut self, i: usize, now: f64) {
+        if self.last_press[i].replace(now).is_some_and(|prev| now - prev < CLICK_CHATTER_SECS) {
+            self.chatter[i] += 1;
+            return;
+        }
+        self.clicks[i] += 1;
+        let continues = self.last_button == Some(i) && now - self.streak_at[i] < STREAK_SECS;
+        self.streak[i] = if continues { self.streak[i] + 1 } else { 1 };
+        self.streak_at[i] = now;
+        self.last_button = Some(i);
+        if i == 0 && self.streak[i] >= 2 {
+            self.double_clicked = true;
         }
     }
 
@@ -115,6 +138,10 @@ impl MouseTest {
             .map(|(_, n)| *n)
             .collect();
         lines.push(format!("Scroll: {}", if dirs.is_empty() { "not tested".into() } else { dirs.join(", ") }));
+        let counts: Vec<String> = (0..5).filter(|i| self.clicks[*i] > 0).map(|i| format!("{} {}", BUTTONS[i].1, self.clicks[i])).collect();
+        if !counts.is_empty() {
+            lines.push(format!("Clicks: {}", counts.join(", ")));
+        }
         lines.push(format!("Double-click: {}", if self.double_clicked { "works" } else { "not tested" }));
         if !chatter.is_empty() {
             lines.push(format!("Click chatter (one click counted twice): {}", chatter.join(", ")));
@@ -168,10 +195,6 @@ impl MouseTest {
                 ui.add_space(16.0);
                 // Drawing / double-click area
                 let (pad, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::click_and_drag());
-                if resp.double_clicked() {
-                    self.double_clicked = true;
-                    self.double_at = now;
-                }
                 if let Some(pos) = resp.hover_pos() {
                     if self.trail.back().is_none_or(|(p, _)| p.distance(pos) > 0.5) {
                         self.trail.push_back((pos, now));
@@ -200,17 +223,35 @@ impl MouseTest {
                 if self.trail.is_empty() {
                     p.text(pad.center(), Align2::CENTER_CENTER, "Move, click and double-click here", theme::bold(16.0), alpha(theme::TEXT_DIM, 0.8));
                 }
-                let since = now - self.double_at;
-                if self.double_clicked && since < 1.0 {
-                    let a = (1.0 - since) as f32;
-                    p.text(pad.center_top() + Vec2::new(0.0, 34.0), Align2::CENTER_CENTER, "Double-click! ✔", theme::bold(22.0), alpha(Color32::WHITE, a));
+                // Click streak pop-up: "Left ×1", "Left ×2 Double!", "Left ×3 Triple!"…
+                if let Some(i) = self.last_button {
+                    let since = now - self.streak_at[i];
+                    if since < 1.2 {
+                        let a = (1.0 - since / 1.2) as f32;
+                        let n = self.streak[i];
+                        let word = match n {
+                            1 => "",
+                            2 => "  Double!",
+                            3 => "  Triple!",
+                            _ => "  Combo!",
+                        };
+                        let bump = (1.0 - since / 0.15).clamp(0.0, 1.0) as f32;
+                        p.text(
+                            pad.center_top() + Vec2::new(0.0, 34.0),
+                            Align2::CENTER_CENTER,
+                            format!("{} ×{n}{word}", BUTTONS[i].1),
+                            theme::bold(22.0 + 6.0 * bump),
+                            alpha(Color32::WHITE, a),
+                        );
+                    }
                 }
             });
 
             ui.add_space(10.0);
             ui.horizontal_wrapped(|ui| {
                 for (i, (_, name)) in BUTTONS.iter().enumerate() {
-                    chip(ui, name, self.tested[i]);
+                    let label = if self.clicks[i] > 0 { format!("{name} {}", self.clicks[i]) } else { name.to_string() };
+                    chip(ui, &label, self.tested[i]);
                 }
                 ui.add_space(8.0);
                 for (d, name) in [(Scroll::Up, "Scroll ↑"), (Scroll::Down, "Scroll ↓"), (Scroll::Left, "Scroll ←"), (Scroll::Right, "Scroll →")] {
@@ -303,4 +344,46 @@ fn chip(ui: &mut egui::Ui, label: &str, ok: bool) {
             let text = if ok { format!("✔ {label}") } else { label.to_string() };
             ui.label(egui::RichText::new(text).size(12.5).color(if ok { theme::INK } else { theme::TEXT_DIM }));
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn different_buttons_never_make_a_double_click() {
+        let mut m = MouseTest::default();
+        m.press(2, 1.0); // Right
+        m.press(0, 1.1); // Left soon after
+        assert!(!m.double_clicked);
+        assert_eq!(m.streak[0], 1);
+    }
+
+    #[test]
+    fn slow_clicks_are_singles() {
+        let mut m = MouseTest::default();
+        m.press(0, 1.0);
+        m.press(0, 1.8);
+        assert!(!m.double_clicked);
+        assert_eq!(m.clicks[0], 2);
+    }
+
+    #[test]
+    fn two_quick_left_clicks_are_a_double_and_three_a_triple() {
+        let mut m = MouseTest::default();
+        m.press(0, 1.0);
+        m.press(0, 1.2);
+        assert!(m.double_clicked);
+        m.press(0, 1.4);
+        assert_eq!(m.streak[0], 3);
+    }
+
+    #[test]
+    fn chatter_is_not_a_click() {
+        let mut m = MouseTest::default();
+        m.press(0, 1.0);
+        m.press(0, 1.01);
+        assert_eq!((m.clicks[0], m.chatter[0]), (1, 1));
+        assert!(!m.double_clicked);
+    }
 }
