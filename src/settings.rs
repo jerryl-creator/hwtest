@@ -18,6 +18,8 @@ pub struct Settings {
     pub sweep_secs: f32,
     pub auto_cycle: bool,
     pub cycle_secs: f32,
+    /// Interface language the user picked (None = follow the system).
+    pub lang: Option<crate::i18n::Lang>,
 }
 
 impl Default for Settings {
@@ -32,6 +34,7 @@ impl Default for Settings {
             sweep_secs: 10.0,
             auto_cycle: false,
             cycle_secs: 3.0,
+            lang: None,
         }
     }
 }

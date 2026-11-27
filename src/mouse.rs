@@ -1,5 +1,6 @@
 //! Mouse / touchpad test: buttons, scroll directions, double-click, click chatter and a drawing area.
 
+use crate::i18n::t;
 use crate::theme::{self, alpha, lerp_color, Mascot};
 use eframe::egui::{self, Align2, Color32, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -146,7 +147,7 @@ impl MouseTest {
     pub fn report(&self) -> crate::report::Section {
         use crate::report::{Section, Status};
         let n = self.tested.iter().filter(|t| **t).count();
-        let chatter: Vec<String> = (0..5).filter(|i| self.chatter[*i] > 0).map(|i| format!("{} ×{}", BUTTONS[i].1, self.chatter[i])).collect();
+        let chatter: Vec<String> = (0..5).filter(|i| self.chatter[*i] > 0).map(|i| format!("{} ×{}", t(BUTTONS[i].1), self.chatter[i])).collect();
         let basics = self.tested[0] && self.tested[1] && self.tested[2]
             && self.scrolled.contains(&Scroll::Up) && self.scrolled.contains(&Scroll::Down);
         let status = if !chatter.is_empty() {
@@ -159,39 +160,39 @@ impl MouseTest {
             Status::InProgress
         };
         let names = |want: bool| -> String {
-            let v: Vec<&str> = BUTTONS.iter().enumerate().filter(|(i, _)| self.tested[*i] == want).map(|(_, (_, n))| *n).collect();
-            if v.is_empty() { "none".into() } else { v.join(", ") }
+            let v: Vec<&str> = BUTTONS.iter().enumerate().filter(|(i, _)| self.tested[*i] == want).map(|(_, (_, n))| t(n)).collect();
+            if v.is_empty() { t("none").into() } else { v.join(", ") }
         };
-        let mut lines = vec![format!("Buttons working: {}", names(true))];
+        let mut lines = vec![tr!("Buttons working: {0}", names(true))];
         if n < 5 {
-            lines.push(format!("Not clicked yet: {}", names(false)));
+            lines.push(tr!("Not clicked yet: {0}", names(false)));
         }
-        let dirs: Vec<&str> = [(Scroll::Up, "up"), (Scroll::Down, "down"), (Scroll::Left, "left"), (Scroll::Right, "right")]
+        let dirs: Vec<&str> = [(Scroll::Up, t("up")), (Scroll::Down, t("down")), (Scroll::Left, t("left")), (Scroll::Right, t("right"))]
             .iter()
             .filter(|(d, _)| self.scrolled.contains(d))
             .map(|(_, n)| *n)
             .collect();
-        lines.push(format!("Scroll: {}", if dirs.is_empty() { "not tested".into() } else { dirs.join(", ") }));
-        let counts: Vec<String> = (0..5).filter(|i| self.clicks[*i] > 0).map(|i| format!("{} {}", BUTTONS[i].1, self.clicks[i])).collect();
+        lines.push(tr!("Scroll: {0}", if dirs.is_empty() { t("not tested").to_string() } else { dirs.join(", ") }));
+        let counts: Vec<String> = (0..5).filter(|i| self.clicks[*i] > 0).map(|i| format!("{} {}", t(BUTTONS[i].1), self.clicks[i])).collect();
         if !counts.is_empty() {
-            lines.push(format!("Clicks: {}", counts.join(", ")));
+            lines.push(tr!("Clicks: {0}", counts.join(", ")));
         }
-        let shortest: Vec<String> = (0..5).filter_map(|i| self.min_gap[i].map(|g| format!("{} {}", BUTTONS[i].1, fmt_gap(g)))).collect();
+        let shortest: Vec<String> = (0..5).filter_map(|i| self.min_gap[i].map(|g| format!("{} {}", t(BUTTONS[i].1), fmt_gap(g)))).collect();
         if !shortest.is_empty() {
-            lines.push(format!("Shortest gap between clicks: {} (under 50 ms = faulty switch)", shortest.join(", ")));
+            lines.push(tr!("Shortest gap between clicks: {0} (under 50 ms = faulty switch)", shortest.join(", ")));
         }
-        lines.push(format!("Double-click: {}", if self.double_clicked { "works" } else { "not tested" }));
+        lines.push(tr!("Double-click: {0}", if self.double_clicked { t("works") } else { t("not tested") }));
         if let Some(dc) = self.dc_counts() {
             let parts: Vec<String> = (0..5)
                 .filter(|i| dc[*i].0 + dc[*i].1 > 0)
-                .map(|i| format!("{} {} clicks, {} unwanted", BUTTONS[i].1, dc[i].0, dc[i].1))
+                .map(|i| tr!("{0} {1} clicks, {2} unwanted", t(BUTTONS[i].1), dc[i].0, dc[i].1))
                 .collect();
             if !parts.is_empty() {
-                lines.push(format!("Double-click test: {}", parts.join("; ")));
+                lines.push(tr!("Double-click test: {0}", parts.join("; ")));
             }
         }
         if !chatter.is_empty() {
-            lines.push(format!("Click chatter (one click counted twice): {}", chatter.join(", ")));
+            lines.push(tr!("Click chatter (one click counted twice): {0}", chatter.join(", ")));
         }
         Section { title: "Mouse", jp: "マウス", status, lines }
     }
@@ -215,33 +216,33 @@ impl MouseTest {
         let dc = self.dc_counts();
         if let Some(dc) = dc {
             if dc.iter().any(|(_, bad)| *bad > 0) {
-                mascot.say("Caught an unwanted double-click! (；ω；)");
+                mascot.say(t("Caught an unwanted double-click! (；ω；)"));
             } else if dc.iter().any(|(n, _)| *n >= DC_TARGET) {
-                mascot.say("No sneaky double-clicks~ that switch is healthy ♪");
+                mascot.say(t("No sneaky double-clicks~ that switch is healthy ♪"));
             } else {
-                mascot.say("Click slowly~ I'm watching for sneaky double-clicks");
+                mascot.say(t("Click slowly~ I'm watching for sneaky double-clicks"));
             }
         } else if let Some(i) = worst {
-            mascot.say(format!("{} clicked twice by itself… worn switch? (；ω；)", BUTTONS[i].1));
+            mascot.say(tr!("{0} clicked twice by itself… worn switch? (；ω；)", t(BUTTONS[i].1)));
         } else if n_tested == 0 {
-            mascot.say("Click every mouse button and scroll~ ♪");
+            mascot.say(t("Click every mouse button and scroll~ ♪"));
         } else if n_tested >= 3 && self.scrolled.len() >= 2 {
-            mascot.say("Your mouse looks healthy! (≧▽≦)");
+            mascot.say(t("Your mouse looks healthy! (≧▽≦)"));
         } else {
-            mascot.say("Try the side buttons and scroll too~");
+            mascot.say(t("Try the side buttons and scroll too~"));
         }
 
         theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
                 theme::card_title(ui, "Mouse & touchpad", "マウス", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::fancy_button(ui, "↺ Reset", Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
+                    if theme::fancy_button(ui, t("↺ Reset"), Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
                         self.reset();
                     }
                     ui.add_space(6.0);
-                    let (label, c1) = if self.dc_test.is_some() { ("■ Stop test", theme::LIGHT) } else { ("Double-click test", theme::ACCENT) };
+                    let (label, c1) = if self.dc_test.is_some() { (t("■ Stop test"), theme::LIGHT) } else { (t("Double-click test"), theme::ACCENT) };
                     if theme::fancy_button(ui, label, Vec2::new(170.0, 32.0), c1, theme::SILVER, true)
-                        .on_hover_text("Click slowly 20 times; any unwanted double-click is caught")
+                        .on_hover_text(t("Click slowly 20 times; any unwanted double-click is caught"))
                         .clicked()
                     {
                         if self.dc_test.is_some() {
@@ -253,7 +254,7 @@ impl MouseTest {
                 });
             });
             ui.label(
-                egui::RichText::new("Click each button slowly, about once a second: a healthy switch never shows a gap under 50 ms. Then scroll every way, double-click and draw.")
+                egui::RichText::new(t("Click each button slowly, about once a second: a healthy switch never shows a gap under 50 ms. Then scroll every way, double-click and draw."))
                     .color(theme::TEXT_DIM),
             );
             ui.add_space(8.0);
@@ -299,7 +300,7 @@ impl MouseTest {
                     p.line_segment([w[0].0, w[1].0], Stroke::new(1.0 + 3.0 * a, alpha(Color32::WHITE, a)));
                 }
                 if self.trail.is_empty() {
-                    p.text(pad.center(), Align2::CENTER_CENTER, "Move, click and double-click here", theme::bold(16.0), alpha(theme::TEXT_DIM, 0.8));
+                    p.text(pad.center(), Align2::CENTER_CENTER, t("Move, click and double-click here"), theme::bold(16.0), alpha(theme::TEXT_DIM, 0.8));
                 }
                 // Click streak pop-up: "Left ×1", "Left ×2 Double!", "Left ×3 Triple!"…
                 if let Some(i) = self.last_button {
@@ -309,15 +310,15 @@ impl MouseTest {
                         let n = self.streak[i];
                         let word = match n {
                             1 => "",
-                            2 => "  Double!",
-                            3 => "  Triple!",
-                            _ => "  Combo!",
+                            2 => t("Double!"),
+                            3 => t("Triple!"),
+                            _ => t("Combo!"),
                         };
                         let bump = (1.0 - since / 0.15).clamp(0.0, 1.0) as f32;
                         p.text(
                             pad.center_top() + Vec2::new(0.0, 34.0),
                             Align2::CENTER_CENTER,
-                            format!("{} ×{n}{word}", BUTTONS[i].1),
+                            format!("{} ×{n}  {word}", t(BUTTONS[i].1)).trim_end().to_string(),
                             theme::bold(22.0 + 6.0 * bump),
                             alpha(Color32::WHITE, a),
                         );
@@ -329,15 +330,15 @@ impl MouseTest {
             ui.add_space(10.0);
             ui.horizontal_wrapped(|ui| {
                 for (i, (_, name)) in BUTTONS.iter().enumerate() {
-                    let label = if self.clicks[i] > 0 { format!("{name} {}", self.clicks[i]) } else { name.to_string() };
+                    let label = if self.clicks[i] > 0 { format!("{} {}", t(name), self.clicks[i]) } else { t(name).to_string() };
                     chip(ui, &label, self.tested[i]);
                 }
                 ui.add_space(8.0);
-                for (d, name) in [(Scroll::Up, "Scroll ↑"), (Scroll::Down, "Scroll ↓"), (Scroll::Left, "Scroll ←"), (Scroll::Right, "Scroll →")] {
+                for (d, name) in [(Scroll::Up, t("Scroll ↑")), (Scroll::Down, t("Scroll ↓")), (Scroll::Left, t("Scroll ←")), (Scroll::Right, t("Scroll →"))] {
                     chip(ui, name, self.scrolled.contains(&d));
                 }
                 ui.add_space(8.0);
-                chip(ui, "Double-click", self.double_clicked);
+                chip(ui, t("Double-click"), self.double_clicked);
             });
             // Gap readout: one row per button that has been clicked twice or more.
             for i in 0..5 {
@@ -348,9 +349,9 @@ impl MouseTest {
                 ui.horizontal(|ui| {
                     ui.add_sized(
                         Vec2::new(70.0, 20.0),
-                        egui::Label::new(egui::RichText::new(BUTTONS[i].1).font(theme::bold(13.0)).color(theme::TEXT)),
+                        egui::Label::new(egui::RichText::new(t(BUTTONS[i].1)).font(theme::bold(13.0)).color(theme::TEXT)),
                     );
-                    ui.label(egui::RichText::new("gaps").size(12.0).color(theme::TEXT_DIM));
+                    ui.label(egui::RichText::new(t("gaps")).size(12.0).color(theme::TEXT_DIM));
                     for &g in &self.gaps[i] {
                         let bad = g < CLICK_CHATTER_SECS;
                         egui::Frame::new()
@@ -368,16 +369,16 @@ impl MouseTest {
                 ui.add_space(4.0);
                 let list: Vec<String> = (0..5)
                     .filter(|i| self.chatter[*i] > 0)
-                    .map(|i| format!("{} ×{}", BUTTONS[i].1, self.chatter[i]))
+                    .map(|i| format!("{} ×{}", t(BUTTONS[i].1), self.chatter[i]))
                     .collect();
                 ui.label(
-                    egui::RichText::new(format!("⚠ Click chatter (one click counted twice): {}", list.join(", ")))
+                    egui::RichText::new(tr!("⚠ Click chatter (one click counted twice): {0}", list.join(", ")))
                         .font(theme::bold(13.0))
                         .color(Color32::WHITE),
                 );
             }
             ui.label(
-                egui::RichText::new("Sideways scroll needs a tilt wheel or a two-finger swipe on a touchpad. Back/Forward are the side buttons, if your mouse has them.")
+                egui::RichText::new(t("Sideways scroll needs a tilt wheel or a two-finger swipe on a touchpad. Back/Forward are the side buttons, if your mouse has them."))
                     .size(12.0)
                     .color(theme::TEXT_DIM),
             );
@@ -389,14 +390,14 @@ impl MouseTest {
         p.text(
             pad.center_top() + Vec2::new(0.0, 34.0),
             Align2::CENTER_CENTER,
-            format!("Double-click test: click slowly, about once a second, {DC_TARGET} times"),
+            tr!("Double-click test: click slowly, about once a second, {0} times", DC_TARGET),
             theme::bold(18.0),
             Color32::WHITE,
         );
         p.text(
             pad.center_top() + Vec2::new(0.0, 60.0),
             Align2::CENTER_CENTER,
-            "Use the button you want to check. A worn switch sometimes clicks twice by itself.",
+            t("Use the button you want to check. A worn switch sometimes clicks twice by itself."),
             egui::FontId::proportional(13.0),
             theme::TEXT_DIM,
         );
@@ -420,21 +421,24 @@ impl MouseTest {
             p.add(egui::Shape::line(pts, Stroke::new(8.0, if bad > 0 { theme::GLINT } else { Color32::WHITE })));
         }
         p.text(c + Vec2::new(0.0, -8.0), Align2::CENTER_CENTER, format!("{n} / {DC_TARGET}"), theme::bold(34.0), Color32::WHITE);
-        p.text(c + Vec2::new(0.0, 26.0), Align2::CENTER_CENTER, BUTTONS[focus].1, theme::bold(14.0), theme::TEXT_DIM);
+        p.text(c + Vec2::new(0.0, 26.0), Align2::CENTER_CENTER, t(BUTTONS[focus].1), theme::bold(14.0), theme::TEXT_DIM);
         if flash > 0.0 {
-            p.text(c + Vec2::new(0.0, -r - 22.0), Align2::CENTER_CENTER, "Unwanted double-click!", theme::bold(20.0), alpha(Color32::WHITE, flash));
+            p.text(c + Vec2::new(0.0, -r - 22.0), Align2::CENTER_CENTER, t("Unwanted double-click!"), theme::bold(20.0), alpha(Color32::WHITE, flash));
         }
 
         // One line per button that has been used during the test.
         let mut y = c.y + r + 30.0;
         for i in (0..5).filter(|i| dc[*i].0 + dc[*i].1 > 0) {
             let (n, bad) = dc[i];
-            let name = BUTTONS[i].1;
+            let name = t(BUTTONS[i].1);
             let (text, col) = match (bad, n >= DC_TARGET) {
-                (0, true) => (format!("✔ {name}: no unwanted double-clicks in {n} clicks"), Color32::WHITE),
-                (0, false) => (format!("{name}: {n} / {DC_TARGET} clicks, none unwanted so far"), theme::TEXT),
-                (b, true) => (format!("⚠ {name}: {} in {}: the switch may be wearing out", plural(b, "unwanted double-click"), plural(n, "click")), theme::GLINT),
-                (b, false) => (format!("⚠ {name}: {} in {} so far", plural(b, "unwanted double-click"), plural(n, "click")), theme::GLINT),
+                (0, true) => (tr!("✔ {0}: no unwanted double-clicks in {1} clicks", name, n), Color32::WHITE),
+                (0, false) => (tr!("{0}: {1} / {2} clicks, none unwanted so far", name, n, DC_TARGET), theme::TEXT),
+                (b, true) => (
+                    tr!("⚠ {0}: {1} in {2}: the switch may be wearing out", name, unwanted(b), clicks(n)),
+                    theme::GLINT,
+                ),
+                (b, false) => (tr!("⚠ {0}: {1} in {2} so far", name, unwanted(b), clicks(n)), theme::GLINT),
             };
             p.text(Pos2::new(c.x, y), Align2::CENTER_CENTER, text, theme::bold(14.0), col);
             y += 22.0;
@@ -491,13 +495,18 @@ impl MouseTest {
         arrow(Scroll::Right, wheel.right_center() + Vec2::new(16.0, 0.0), "→");
 
         // Small labels for the side buttons.
-        p.text(fwd.left_center() + Vec2::new(-6.0, 0.0), Align2::RIGHT_CENTER, "Fwd", egui::FontId::proportional(11.0), theme::TEXT_DIM);
-        p.text(back.left_center() + Vec2::new(-6.0, 0.0), Align2::RIGHT_CENTER, "Back", egui::FontId::proportional(11.0), theme::TEXT_DIM);
+        p.text(fwd.left_center() + Vec2::new(-6.0, 0.0), Align2::RIGHT_CENTER, t("Fwd"), egui::FontId::proportional(11.0), theme::TEXT_DIM);
+        p.text(back.left_center() + Vec2::new(-6.0, 0.0), Align2::RIGHT_CENTER, t("Back"), egui::FontId::proportional(11.0), theme::TEXT_DIM);
     }
 }
 
-fn plural(n: u32, word: &str) -> String {
-    if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
+/// "1 click" / "3 clicks" (only English changes the word).
+fn clicks(n: u32) -> String {
+    if n == 1 { tr!("{0} click", n) } else { tr!("{0} clicks", n) }
+}
+
+fn unwanted(n: u32) -> String {
+    if n == 1 { tr!("{0} unwanted double-click", n) } else { tr!("{0} unwanted double-clicks", n) }
 }
 
 /// A gap between clicks, rounded honestly: input arrives once per frame (~16 ms).

@@ -1,3 +1,4 @@
+use crate::i18n::t;
 use crate::theme::{self, alpha, Mascot};
 use eframe::egui::{self, epaint::Mesh, Align2, Color32, Key, Pos2, Rect, Sense, Shape, Stroke, Vec2, ViewportCommand};
 use std::time::{Duration, Instant};
@@ -136,22 +137,22 @@ impl PixelTest {
 
     pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, cjk: bool) {
         if self.marks.is_empty() {
-            mascot.say("Look closely for dots that don't match~ (◎_◎)");
+            mascot.say(t("Look closely for dots that don't match~ (◎_◎)"));
         } else {
-            mascot.say(format!("{} spot(s) marked. Check them in the Report tab~", self.marks.len()));
+            mascot.say(tr!("{0} spot(s) marked. Check them in the Report tab~", self.marks.len()));
         }
-        let t = ui.input(|i| i.time as f32);
+        let time = ui.input(|i| i.time as f32);
 
         theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
                 theme::card_title(ui, "Display test", "ディスプレイチェック", cjk);
                 ui.add_space(12.0);
-                let opts: Vec<_> = Mode::ALL.iter().map(|m| (*m, m.label(), m.hint())).collect();
+                let opts: Vec<_> = Mode::ALL.iter().map(|m| (*m, t(m.label()), t(m.hint()))).collect();
                 if theme::segmented(ui, "disp-mode", &opts, &mut self.mode) {
                     self.index = 0;
                 }
             });
-            ui.label(egui::RichText::new(self.mode.hint()).color(theme::TEXT_DIM));
+            ui.label(egui::RichText::new(t(self.mode.hint())).color(theme::TEXT_DIM));
         });
         ui.add_space(12.0);
 
@@ -159,29 +160,29 @@ impl PixelTest {
             theme::card().show(&mut cols[0], |ui| {
                 match self.mode {
                     Mode::DeadPixels => {
-                        bullet(ui, theme::LIGHT, "Dead pixel", "always black: easiest to spot on White");
-                        bullet(ui, theme::ACCENT, "Stuck pixel", "always one colour: spot it on Black or the primaries");
+                        bullet(ui, theme::LIGHT, t("Dead pixel"), t("always black: easiest to spot on White"));
+                        bullet(ui, theme::ACCENT, t("Stuck pixel"), t("always one colour: spot it on Black or the primaries"));
                     }
                     Mode::Uniformity => {
-                        bullet(ui, theme::LIGHT, "Backlight bleed", "brighter patches at the edges or corners on Black");
-                        bullet(ui, theme::ACCENT, "Clouding / uniformity", "blotchy or uneven areas on the dark and mid grays");
+                        bullet(ui, theme::LIGHT, t("Backlight bleed"), t("brighter patches at the edges or corners on Black"));
+                        bullet(ui, theme::ACCENT, t("Clouding / uniformity"), t("blotchy or uneven areas on the dark and mid grays"));
                     }
                     Mode::Gradients => {
-                        bullet(ui, theme::LIGHT, "Banding", "visible steps or stripes instead of a smooth fade");
-                        bullet(ui, theme::ACCENT, "Tint", "the gray ramp looking pink, green or blue in places");
+                        bullet(ui, theme::LIGHT, t("Banding"), t("visible steps or stripes instead of a smooth fade"));
+                        bullet(ui, theme::ACCENT, t("Tint"), t("the gray ramp looking pink, green or blue in places"));
                     }
                 }
-                bullet(ui, theme::GLOW, "Tip", "wipe the screen first so dust doesn't fool you");
+                bullet(ui, theme::GLOW, t("Tip"), t("wipe the screen first so dust doesn't fool you"));
                 ui.add_space(12.0);
 
-                ui.label(egui::RichText::new("Screens in this test").font(theme::bold(14.0)));
+                ui.label(egui::RichText::new(t("Screens in this test")).font(theme::bold(14.0)));
                 ui.add_space(4.0);
                 let list = screens(self.mode);
                 let (row, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 56.0), Sense::hover());
                 let p = ui.painter();
                 let step = (row.width() / list.len() as f32).min(56.0);
                 for (i, s) in list.iter().enumerate() {
-                    let bob = (t * 2.0 + i as f32 * 0.6).sin() * 4.0;
+                    let bob = (time * 2.0 + i as f32 * 0.6).sin() * 4.0;
                     let center = Pos2::new(row.left() + step * (i as f32 + 0.5), row.center().y + bob);
                     let r = Rect::from_center_size(center, Vec2::splat(34.0));
                     match s.fill {
@@ -199,24 +200,24 @@ impl PixelTest {
 
             theme::card().show(&mut cols[1], |ui| {
                 theme::card_title(ui, "Options", "設定", cjk);
-                ui.checkbox(&mut self.auto_cycle, "Auto-cycle screens");
+                ui.checkbox(&mut self.auto_cycle, t("Auto-cycle screens"));
                 ui.add_enabled(
                     self.auto_cycle,
-                    egui::Slider::new(&mut self.cycle_secs, 0.5..=10.0).suffix(" s").text("per screen"),
+                    egui::Slider::new(&mut self.cycle_secs, 0.5..=10.0).suffix(" s").text(t("per screen")),
                 );
                 if self.mode == Mode::DeadPixels {
                     ui.add_space(6.0);
-                    ui.checkbox(&mut self.flash, "Stuck-pixel fixer (rapid RGB flashing)");
+                    ui.checkbox(&mut self.flash, t("Stuck-pixel fixer (rapid RGB flashing)"));
                     if self.flash {
                         ui.label(
-                            egui::RichText::new("⚠ Flashing lights: skip this if you are sensitive to them.")
+                            egui::RichText::new(t("⚠ Flashing lights: skip this if you are sensitive to them."))
                                 .size(12.5)
                                 .color(theme::GLINT),
                         );
                     }
                 }
                 ui.add_space(14.0);
-                if theme::fancy_button(ui, "▶  Start fullscreen test", Vec2::new(260.0, 48.0), theme::ACCENT, theme::SILVER, true).clicked() {
+                if theme::fancy_button(ui, t("▶  Start fullscreen test"), Vec2::new(260.0, 48.0), theme::ACCENT, theme::SILVER, true).clicked() {
                     self.running = true;
                     self.index = 0;
                     self.last_switch = Instant::now();
@@ -228,11 +229,11 @@ impl PixelTest {
                 }
                 ui.add_space(10.0);
                 for (k, d) in [
-                    ("Click", "mark a bad spot (click it again to remove)"),
-                    ("Space / → / scroll", "next screen"),
-                    ("← / right-click", "previous screen"),
-                    ("Backspace", "undo last mark"),
-                    ("Esc", "exit"),
+                    (t("Click"), t("mark a bad spot (click it again to remove)")),
+                    (t("Space / → / scroll"), t("next screen")),
+                    (t("← / right-click"), t("previous screen")),
+                    ("Backspace", t("undo last mark")),
+                    ("Esc", t("exit")),
                 ] {
                     ui.horizontal(|ui| {
                         egui::Frame::new()
@@ -250,9 +251,10 @@ impl PixelTest {
             ui.add_space(12.0);
             theme::card().show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    theme::card_title(ui, &format!("Marked spots ({})", self.marks.len()), "マーク", cjk);
+                    theme::card_title(ui, "Marked spots", "マーク", cjk);
+                    ui.label(egui::RichText::new(format!("({})", self.marks.len())).font(theme::bold(18.0)).color(Color32::WHITE));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if theme::fancy_button(ui, "Clear marks", Vec2::new(120.0, 30.0), theme::SILVER, theme::STEEL, true).clicked() {
+                        if theme::fancy_button(ui, t("Clear marks"), Vec2::new(120.0, 30.0), theme::SILVER, theme::STEEL, true).clicked() {
                             self.marks.clear();
                         }
                     });
@@ -265,7 +267,7 @@ impl PixelTest {
                             .inner_margin(egui::Margin::symmetric(8, 2))
                             .show(ui, |ui| {
                                 ui.label(
-                                    egui::RichText::new(format!("#{} x {}, y {} · {}", i + 1, m.px.0, m.px.1, m.on))
+                                    egui::RichText::new(format!("#{} x {}, y {} · {}", i + 1, m.px.0, m.px.1, t(m.on)))
                                         .size(12.5)
                                         .color(theme::INK),
                                 );
@@ -287,18 +289,18 @@ impl PixelTest {
         };
         let mut lines = Vec::new();
         if let Some((w, h)) = self.screen_px {
-            lines.push(format!("Screen: {w} × {h} pixels"));
+            lines.push(tr!("Screen: {0} × {1} pixels", w, h));
         }
         if !self.done_modes.is_empty() {
-            lines.push(format!("Tests run: {}", self.done_modes.join(", ")));
+            lines.push(tr!("Tests run: {0}", self.done_modes.iter().map(|m| t(m)).collect::<Vec<_>>().join(", ")));
         }
         if self.marks.is_empty() {
             if !self.done_modes.is_empty() {
-                lines.push("No bad spots marked".into());
+                lines.push(t("No bad spots marked").into());
             }
         } else {
             for (i, m) in self.marks.iter().enumerate() {
-                lines.push(format!("Marked spot #{} at x {}, y {} (on {})", i + 1, m.px.0, m.px.1, m.on));
+                lines.push(tr!("Marked spot #{0} at x {1}, y {2} (on {3})", i + 1, m.px.0, m.px.1, t(m.on)));
             }
         }
         Section { title: "Display", jp: "ディスプレイ", status, lines }
@@ -355,7 +357,7 @@ impl PixelTest {
         }
         let flashing = self.flash && self.mode == Mode::DeadPixels;
         let screen = &list[self.index.min(n - 1)];
-        let name = if flashing { "Flashing" } else { screen.name };
+        let name = t(if flashing { "Flashing" } else { screen.name });
 
         if let Some(pos) = click {
             // Clicking an existing mark removes it; anywhere else adds one.
@@ -410,9 +412,9 @@ impl PixelTest {
                 let a = (left / 0.3).min(1.0);
                 let pill = Rect::from_center_size(rect.center(), Vec2::new(520.0, 74.0));
                 p.rect_filled(pill, 37.0, Color32::from_rgba_unmultiplied(12, 12, 12, (225.0 * a) as u8));
-                let marks = if self.marks.is_empty() { String::new() } else { format!("  ·  {} marked", self.marks.len()) };
+                let marks = if self.marks.is_empty() { String::new() } else { tr!("  ·  {0} marked", self.marks.len()) };
                 p.text(pill.center() + Vec2::new(0.0, -11.0), Align2::CENTER_CENTER, format!("{} / {}  ·  {name}{marks}", self.index + 1, n), theme::bold(19.0), alpha(Color32::WHITE, a));
-                p.text(pill.center() + Vec2::new(0.0, 15.0), Align2::CENTER_CENTER, "click = mark spot  ·  Space = next  ·  Backspace = undo  ·  Esc = exit", egui::FontId::proportional(13.0), alpha(theme::LIGHT, a));
+                p.text(pill.center() + Vec2::new(0.0, 15.0), Align2::CENTER_CENTER, t("click = mark spot  ·  Space = next  ·  Backspace = undo  ·  Esc = exit"), egui::FontId::proportional(13.0), alpha(theme::LIGHT, a));
             }
         });
 

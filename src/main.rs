@@ -1,5 +1,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")] // no console window on Windows
 
+#[macro_use]
+mod i18n;
 mod camera;
 mod chatter;
 mod gamepad;
@@ -53,10 +55,25 @@ struct App {
     gamepad: gamepad::GamepadTest,
     camera: camera::CameraTest,
     report: report::ReportTab,
+    /// The language the user picked (None = follow the system).
+    lang_choice: Option<i18n::Lang>,
 }
 
 impl App {
     fn new(cc: &eframe::CreationContext) -> Self {
+        // Restore remembered settings (skipped for dev screenshots so they're reproducible).
+        let saved = cc
+            .storage
+            .filter(|_| !dev_run())
+            .and_then(|st| eframe::get_value::<settings::Settings>(st, settings::KEY))
+            .unwrap_or_default();
+        // Language: the user's pick, else the system's. Dev runs: NYANSPECT_LANG=en|zh|ms|ja.
+        let lang = match std::env::var("NYANSPECT_LANG") {
+            Ok(v) => i18n::Lang::from_locale(&v),
+            Err(_) if dev_run() => i18n::Lang::En,
+            Err(_) => saved.lang.unwrap_or_else(i18n::Lang::system),
+        };
+        i18n::set(lang);
         let cjk = theme::setup(&cc.egui_ctx);
         // Dev check: NYANSPECT_LIGHT=1 flips egui to light mode (like Windows' Light theme); the app must still look the same.
         if std::env::var("NYANSPECT_LIGHT").is_ok() {
@@ -75,13 +92,8 @@ impl App {
             gamepad: gamepad::GamepadTest::default(),
             camera: camera::CameraTest::default(),
             report: report::ReportTab::default(),
+            lang_choice: saved.lang,
         };
-        // Restore remembered settings (skipped for dev screenshots so they're reproducible).
-        let saved = cc
-            .storage
-            .filter(|_| !dev_run())
-            .and_then(|st| eframe::get_value::<settings::Settings>(st, settings::KEY))
-            .unwrap_or_default();
         app.keyboard.load_settings(&saved);
         app.pixels.load_settings(&saved);
         app.speakers.load_settings(&saved);
@@ -96,13 +108,13 @@ impl App {
             // Logo with glow
             let (r, logo) = ui.allocate_exact_size(Vec2::new(170.0, 44.0), Sense::hover());
             if let Some(info) = RENDERER_INFO.get() {
-                logo.on_hover_text(format!("Renderer: {info}"));
+                logo.on_hover_text(tr!("Renderer: {0}", info));
             }
             let p = ui.painter();
             let t = ui.input(|i| i.time as f32);
             theme::glow(p, r.left_center() + Vec2::new(60.0, 0.0), 70.0, alpha(theme::ACCENT, 0.12 + 0.04 * (t * 2.0).sin()));
             let title = p.text(r.left_center() + Vec2::new(0.0, -6.0), Align2::LEFT_CENTER, "Nyanspect", theme::bold(26.0), Color32::WHITE);
-            let sub = if self.cjk { "にゃんスペクト" } else { "hardware inspector" };
+            let sub = if self.cjk { "にゃんスペクト" } else { i18n::t("hardware inspector") };
             p.text(r.left_center() + Vec2::new(2.0, 15.0), Align2::LEFT_CENTER, sub, egui::FontId::proportional(11.0), theme::LIGHT);
             theme::star(p, Pos2::new(title.right() + 6.0, r.top() + 6.0 + (t * 3.0).sin() * 2.0), 6.0, theme::GLINT);
 
@@ -112,19 +124,59 @@ impl App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
                 self.mascot.ui(ui);
+                ui.add_space(4.0);
+                self.language_button(ui);
             });
         });
         ui.add_space(8.0);
     }
 
+    /// "🌐 EN" pill that opens a menu of languages.
+    fn language_button(&mut self, ui: &mut egui::Ui) {
+        let cur = i18n::lang();
+        let label = format!("🌐 {}", cur.short());
+        let font = theme::bold(13.0);
+        let w = ui.painter().layout_no_wrap(label.clone(), font.clone(), Color32::WHITE).size().x + 26.0;
+        let (r, resp) = ui.allocate_exact_size(Vec2::new(w, 32.0), Sense::CLICK);
+        let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(i18n::t("Language"));
+        let p = ui.painter();
+        let hover = ui.ctx().animate_bool_with_time(resp.id, resp.hovered(), 0.15);
+        p.rect_filled(r, 16.0, Color32::from_rgba_unmultiplied(10, 10, 12, 200));
+        p.rect_stroke(r, 16.0, egui::Stroke::new(1.0, alpha(theme::LIGHT, 0.15 + 0.4 * hover)), egui::StrokeKind::Inside);
+        p.text(r.center(), Align2::CENTER_CENTER, label, font, theme::lerp_color(theme::TEXT_DIM, Color32::WHITE, hover));
+        egui::Popup::menu(&resp).show(|ui| {
+            ui.set_min_width(170.0);
+            for l in i18n::Lang::ALL {
+                let text = if l == cur { format!("✔  {}", l.native()) } else { format!("     {}", l.native()) };
+                if ui.add(egui::Button::new(egui::RichText::new(text).size(14.0)).frame(false)).clicked() && l != cur {
+                    self.set_language(ui.ctx(), l);
+                }
+            }
+        });
+    }
+
+    fn set_language(&mut self, ctx: &egui::Context, lang: i18n::Lang) {
+        i18n::set(lang);
+        self.lang_choice = Some(lang);
+        self.cjk = theme::apply_fonts(ctx, lang);
+    }
+
     fn tab_bar(&mut self, ui: &mut egui::Ui) {
         // Tabs share the space: wide with few tabs, narrower as more are added.
-        let tab_w = match TABS.len() {
+        let base_w: f32 = match TABS.len() {
             0..=3 => 138.0,
             4..=5 => 112.0,
             _ => 100.0,
         };
         let font = if TABS.len() <= 3 { 14.5 } else { 13.5 };
+        // Translated names can be longer: widen the tabs to fit (within reason); any label
+        // still too long is drawn smaller below.
+        let label = |icon: &str, name: &str| format!("{icon} {}", i18n::t(name));
+        let widest = TABS
+            .iter()
+            .map(|(_, icon, name, _)| ui.painter().layout_no_wrap(label(icon, name), theme::bold(font), Color32::WHITE).size().x)
+            .fold(0.0, f32::max);
+        let tab_w = (widest + 18.0).clamp(base_w, 124.0);
         let (bar, _) = ui.allocate_exact_size(Vec2::new(tab_w * TABS.len() as f32 + 12.0, 50.0), Sense::hover());
         let p = ui.painter().clone();
         p.rect_filled(bar, 25.0, Color32::from_rgba_unmultiplied(10, 10, 12, 200));
@@ -149,9 +201,13 @@ impl App {
             }
             let col = if sel { theme::INK } else { theme::lerp_color(theme::TEXT_DIM, theme::TEXT, hover) };
             let dy = if self.cjk { -6.0 } else { 0.0 };
-            p.text(r.center() + Vec2::new(0.0, dy), Align2::CENTER_CENTER, format!("{icon} {name}"), theme::bold(font), col);
+            let text = label(icon, name);
+            let w = ui.painter().layout_no_wrap(text.clone(), theme::bold(font), Color32::WHITE).size().x;
+            let size = if w > tab_w - 10.0 { font * (tab_w - 10.0) / w } else { font };
+            p.text(r.center() + Vec2::new(0.0, dy), Align2::CENTER_CENTER, text, theme::bold(size), col);
             if self.cjk {
-                p.text(r.center() + Vec2::new(0.0, 11.0), Align2::CENTER_CENTER, *jp, egui::FontId::proportional(10.0), alpha(col, 0.75));
+                let sub = i18n::subtitle(name, jp);
+                p.text(r.center() + Vec2::new(0.0, 11.0), Align2::CENTER_CENTER, sub, egui::FontId::proportional(10.0), alpha(col, 0.75));
             }
         }
     }
@@ -243,12 +299,20 @@ impl eframe::App for App {
         self.keyboard.store_settings(&mut s);
         self.pixels.store_settings(&mut s);
         self.speakers.store_settings(&mut s);
+        s.lang = self.lang_choice;
         eframe::set_value(storage, settings::KEY, &s);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = &ui.ctx().clone();
         dev_screenshot(ctx, &mut self.tab);
+        // Dev check: NYANSPECT_LANG_SWITCH=zh switches language after 1 s, like using the 🌐 menu.
+        if let Ok(v) = std::env::var("NYANSPECT_LANG_SWITCH") {
+            let target = i18n::Lang::from_locale(&v);
+            if ctx.input(|i| i.time) > 1.0 && i18n::lang() != target {
+                self.set_language(ctx, target);
+            }
+        }
         // Fullscreen display test takes over the whole window.
         if self.pixels.running {
             self.pixels.fullscreen(ctx, ui);

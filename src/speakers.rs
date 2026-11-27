@@ -1,4 +1,5 @@
 use crate::sfx_audio::{self, SfxSound, Voice};
+use crate::i18n::{t, tc};
 use crate::theme::{self, alpha, lerp_color, Mascot};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, Vec2};
@@ -67,7 +68,7 @@ fn channel_name(i: usize, n: usize) -> String {
         8 => &["Front L", "Front R", "Center", "Subwoofer", "Rear L", "Rear R", "Side L", "Side R"],
         _ => &[],
     };
-    names.get(i).map(|s| s.to_string()).unwrap_or(format!("Ch {}", i + 1))
+    names.get(i).map(|s| tc("speaker", s).to_string()).unwrap_or(tr!("Ch {0}", i + 1))
 }
 
 impl SpeakerTest {
@@ -216,7 +217,7 @@ impl SpeakerTest {
     pub fn report(&self) -> crate::report::Section {
         use crate::report::{Section, Status};
         if let Some(e) = &self.error {
-            return Section { title: "Speakers", jp: "スピーカー", status: Status::Issue, lines: vec![format!("No audio output: {e}")] };
+            return Section { title: "Speakers", jp: "スピーカー", status: Status::Issue, lines: vec![tr!("No audio output: {0}", e)] };
         }
         let answered = self.heard.iter().filter(|h| h.is_some()).count();
         let bad = self.heard.iter().any(|h| *h == Some(false));
@@ -229,13 +230,13 @@ impl SpeakerTest {
         } else {
             Status::InProgress
         };
-        let mut lines = vec![format!("Output: {} ({} channels)", self.device_name, self.channels)];
+        let mut lines = vec![tr!("Output: {0} ({1} channels)", self.device_name, self.channels)];
         for (c, h) in self.heard.iter().enumerate() {
-            let what = match h {
+            let what = t(match h {
                 Some(true) => "heard ✔",
                 Some(false) => "NOT heard (or distorted)",
                 None => "not checked",
-            };
+            });
             lines.push(format!("{}: {what}", channel_name(c, self.channels)));
         }
         Section { title: "Speakers", jp: "スピーカー", status, lines }
@@ -258,9 +259,9 @@ impl SpeakerTest {
         if let Some(e) = &self.error {
             theme::card().show(ui, |ui| {
                 theme::card_title(ui, "Speaker test", "スピーカーテスト", cjk);
-                ui.colored_label(theme::ACCENT, format!("Audio unavailable: {e}"));
+                ui.colored_label(theme::ACCENT, tr!("Audio unavailable: {0}", e));
             });
-            mascot.say("Hmm… I can't find any speakers (；ω；)");
+            mascot.say(t("Hmm… I can't find any speakers (；ω；)"));
             return;
         }
 
@@ -271,10 +272,10 @@ impl SpeakerTest {
         };
         let playing = mode != Mode::Off;
         match mode {
-            Mode::Off => mascot.say("Turn your volume down a bit first, ne~ (・ω・)"),
-            Mode::Sweep => mascot.say("Listen for buzzing or rattling~ (｀・ω・´)"),
-            Mode::Alternate => mascot.say("Left… right… left… right~ ♪"),
-            Mode::Tone => mascot.say("Can you hear it? La la la~ ♫"),
+            Mode::Off => mascot.say(t("Turn your volume down a bit first, ne~ (・ω・)")),
+            Mode::Sweep => mascot.say(t("Listen for buzzing or rattling~ (｀・ω・´)")),
+            Mode::Alternate => mascot.say(t("Left… right… left… right~ ♪")),
+            Mode::Tone => mascot.say(t("Can you hear it? La la la~ ♫")),
         }
         if playing {
             mascot.cheer();
@@ -298,7 +299,7 @@ impl SpeakerTest {
             let row_w = n as f32 * orb + (n.saturating_sub(1)) as f32 * spacing;
             let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), orb + 82.0), Sense::hover());
             let start_x = area.center().x - row_w / 2.0;
-            let t = ui.input(|i| i.time as f32);
+            let time = ui.input(|i| i.time as f32);
             for c in 0..n {
                 let center = Pos2::new(start_x + orb / 2.0 + c as f32 * (orb + spacing), area.top() + orb / 2.0 + 10.0);
                 let r = Rect::from_center_size(center, Vec2::splat(orb));
@@ -312,7 +313,7 @@ impl SpeakerTest {
                 let on = playing && live.get(c).copied().unwrap_or(false);
                 let a = ui.ctx().animate_bool_with_time(resp.id.with("on"), on, 0.2);
                 let h = ui.ctx().animate_bool_with_time(resp.id.with("hov"), resp.hovered(), 0.15);
-                draw_orb(ui.painter(), center, orb / 2.0, a, h, t, &channel_name(c, n));
+                draw_orb(ui.painter(), center, orb / 2.0, a, h, time, &channel_name(c, n));
 
                 // Result badge and the "Heard it?" Yes/No buttons once this speaker has played.
                 if let Some(ok) = self.heard[c] {
@@ -322,8 +323,8 @@ impl SpeakerTest {
                 }
                 if self.played[c] {
                     let opts = [
-                        (Some(true), "Yes", "I heard this speaker"),
-                        (Some(false), "No", "No sound (or crackling) from this speaker"),
+                        (Some(true), t("Yes"), t("I heard this speaker")),
+                        (Some(false), t("No"), t("No sound (or crackling) from this speaker")),
                     ];
                     let r = Rect::from_center_size(Pos2::new(center.x, area.top() + orb + 58.0), Vec2::new(orb + spacing, 34.0));
                     ui.scope_builder(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
@@ -339,17 +340,17 @@ impl SpeakerTest {
                 let total = 4.0 * 186.0 + 3.0 * 10.0;
                 ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
                 let b = Vec2::new(186.0, 42.0);
-                if theme::fancy_button(ui, "♫  All channels", b, theme::ACCENT, theme::SILVER, true).clicked() {
+                if theme::fancy_button(ui, t("♫  All channels"), b, theme::ACCENT, theme::SILVER, true).clicked() {
                     self.start(Mode::Tone, vec![true; n]);
                     self.played.iter_mut().for_each(|p| *p = true);
                 }
-                if theme::fancy_button(ui, "⇄  Left / Right", b, theme::SILVER, theme::STEEL, n >= 2).clicked() {
+                if theme::fancy_button(ui, t("⇄  Left / Right"), b, theme::SILVER, theme::STEEL, n >= 2).clicked() {
                     self.start(Mode::Alternate, vec![true; n]);
                 }
-                if theme::fancy_button(ui, "~  Sweep 20 Hz – 20 kHz", b, theme::LIGHT, theme::SILVER, true).clicked() {
+                if theme::fancy_button(ui, t("~  Sweep 20 Hz – 20 kHz"), b, theme::LIGHT, theme::SILVER, true).clicked() {
                     self.start(Mode::Sweep, vec![true; n]);
                 }
-                if theme::fancy_button(ui, "■  Stop", b, Color32::from_rgb(120, 120, 126), theme::STEEL, playing).clicked() {
+                if theme::fancy_button(ui, t("■  Stop"), b, Color32::from_rgb(120, 120, 126), theme::STEEL, playing).clicked() {
                     self.stop();
                 }
             });
@@ -363,16 +364,16 @@ impl SpeakerTest {
                 visualizer(ui, playing, wave, freq, volume, ui.input(|i| i.time as f32));
                 ui.add_space(6.0);
                 let status = match mode {
-                    Mode::Off => "Stopped".to_string(),
+                    Mode::Off => t("Stopped").to_string(),
                     Mode::Tone => {
                         let on: Vec<_> = live.iter().enumerate().filter(|(_, b)| **b).map(|(i, _)| channel_name(i, n)).collect();
-                        format!("Playing  ·  {}", on.join(", "))
+                        tr!("Playing  ·  {0}", on.join(", "))
                     }
                     Mode::Alternate => {
-                        let side = if live.first().copied().unwrap_or(false) { "LEFT" } else { "RIGHT" };
-                        format!("Alternating  ·  {side}")
+                        let side = if live.first().copied().unwrap_or(false) { t("LEFT") } else { t("RIGHT") };
+                        tr!("Alternating  ·  {0}", side)
                     }
-                    Mode::Sweep => format!("Sweeping  ·  {:.0} Hz", current),
+                    Mode::Sweep => tr!("Sweeping  ·  {0} Hz", format!("{current:.0}")),
                 };
                 ui.label(egui::RichText::new(status).font(theme::bold(18.0)).color(if playing { theme::GLOW } else { theme::TEXT_DIM }));
             });
@@ -381,16 +382,16 @@ impl SpeakerTest {
                 theme::card_title(ui, "Settings", "設定", cjk);
                 let mut s = self.shared.lock().unwrap();
                 ui.horizontal(|ui| {
-                    ui.label("Wave");
-                    ui.selectable_value(&mut s.wave, Wave::Sine, "Sine");
-                    ui.selectable_value(&mut s.wave, Wave::Square, "Square");
-                    ui.selectable_value(&mut s.wave, Wave::Noise, "White noise");
+                    ui.label(t("Wave"));
+                    ui.selectable_value(&mut s.wave, Wave::Sine, t("Sine"));
+                    ui.selectable_value(&mut s.wave, Wave::Square, tc("wave", "Square"));
+                    ui.selectable_value(&mut s.wave, Wave::Noise, t("White noise"));
                 });
-                ui.add(egui::Slider::new(&mut s.freq, 20.0..=20000.0).logarithmic(true).suffix(" Hz").text("Frequency"));
-                ui.add(egui::Slider::new(&mut s.volume, 0.0..=1.0).custom_formatter(|v, _| format!("{:.0}%", v * 100.0)).text("Volume"));
-                ui.add(egui::Slider::new(&mut s.sweep_secs, 3.0..=30.0).suffix(" s").text("Sweep length"));
+                ui.add(egui::Slider::new(&mut s.freq, 20.0..=20000.0).logarithmic(true).suffix(" Hz").text(t("Frequency")));
+                ui.add(egui::Slider::new(&mut s.volume, 0.0..=1.0).custom_formatter(|v, _| format!("{:.0}%", v * 100.0)).text(t("Volume")));
+                ui.add(egui::Slider::new(&mut s.sweep_secs, 3.0..=30.0).suffix(" s").text(t("Sweep length")));
                 ui.add_space(6.0);
-                ui.label(egui::RichText::new("⚠ Start with the volume low — test tones can be loud.").size(12.5).color(theme::GLINT));
+                ui.label(egui::RichText::new(t("⚠ Start with the volume low — test tones can be loud.")).size(12.5).color(theme::GLINT));
             });
         });
     }

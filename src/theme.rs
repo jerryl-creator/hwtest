@@ -1,5 +1,6 @@
 //! Monochrome manga look: palette, fonts, gradient helpers, animated background, mascot.
 
+use std::sync::OnceLock;
 use eframe::egui::{
     self, epaint::Mesh, Align2, Color32, FontFamily, FontId, Pos2, Rect, Response, Sense, Shape,
     Stroke, StrokeKind, Ui, Vec2,
@@ -41,62 +42,94 @@ pub fn bold(size: f32) -> FontId {
 
 // ---------- fonts & style ----------
 
-fn read_first(paths: &[String]) -> std::io::Result<Vec<u8>> {
-    let mut last = Err(std::io::Error::from(std::io::ErrorKind::NotFound));
-    for p in paths {
-        last = std::fs::read(p);
-        if last.is_ok() {
-            break;
+/// Font files are big (≈20 MB), so each is read once and kept for the life of the app
+/// (switching language only reorders them).
+fn font_bytes(path: &str) -> Option<&'static [u8]> {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<&'static [u8]>>>> = OnceLock::new();
+    let mut cache = CACHE.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    *cache.entry(path.to_string()).or_insert_with(|| std::fs::read(path).ok().map(|b| &*Box::leak(b.into_boxed_slice())))
+}
+
+/// The first font that exists: (bytes, face index inside a .ttc collection).
+fn first_font(candidates: &[(String, u32)]) -> Option<(&'static [u8], u32)> {
+    candidates.iter().find_map(|(path, index)| font_bytes(path).map(|b| (b, *index)))
+}
+
+/// System CJK fonts: (Japanese regular, Japanese bold, Chinese regular, Chinese bold) candidates.
+/// Noto Sans CJK collections hold every region: face 0 is Japanese, face 2 Simplified Chinese.
+/// On Windows, Japanese fonts lack many simplified characters, so Chinese uses Microsoft YaHei.
+fn cjk_font_paths() -> [Vec<(String, u32)>; 4] {
+    let win = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
+    let noto = ["/usr/share/fonts/noto-cjk", "/usr/share/fonts/opentype/noto", "/usr/share/fonts/google-noto-cjk"];
+    let noto_files = |names: &[&str], index: u32| -> Vec<(String, u32)> {
+        noto.iter().flat_map(|dir| names.iter().map(move |n| (format!("{dir}/{n}"), index))).collect()
+    };
+    let regular = ["NotoSansCJK-Medium.ttc", "NotoSansCJK-Regular.ttc"];
+    let bold = ["NotoSansCJK-Bold.ttc"];
+    let winf = |names: &[&str]| -> Vec<(String, u32)> { names.iter().map(|n| (format!("{win}\\Fonts\\{n}"), 0)).collect() };
+    let mut ja = noto_files(&regular, 0);
+    ja.extend(winf(&["YuGothM.ttc", "meiryo.ttc", "msgothic.ttc"]));
+    let mut ja_bold = noto_files(&bold, 0);
+    ja_bold.extend(winf(&["YuGothB.ttc", "meiryob.ttc"]));
+    let mut zh = noto_files(&regular, 2);
+    zh.extend(winf(&["msyh.ttc", "simsun.ttc"]));
+    let mut zh_bold = noto_files(&bold, 2);
+    zh_bold.extend(winf(&["msyhbd.ttc"]));
+    [ja, ja_bold, zh, zh_bold]
+}
+
+/// Set up fonts for a language: the matching CJK font first (so Chinese text gets Chinese
+/// glyph shapes and Japanese gets Japanese ones), the other one as a fallback.
+/// Returns true if any CJK font was found.
+pub fn apply_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) -> bool {
+    let [ja, ja_bold, zh, zh_bold] = cjk_font_paths();
+    let (ja, ja_bold, zh, zh_bold) = (first_font(&ja), first_font(&ja_bold), first_font(&zh), first_font(&zh_bold));
+    let chinese_first = lang == crate::i18n::Lang::Zh;
+    let order = |a, b| if chinese_first { [b, a] } else { [a, b] };
+
+    let mut fonts = egui::FontDefinitions::default();
+    let defaults = fonts.families[&FontFamily::Proportional].clone();
+    let mut regular_names = Vec::new();
+    let mut bold_names = Vec::new();
+    for (name, font) in order(("cjk-ja", ja), ("cjk-zh", zh)) {
+        if let Some((bytes, index)) = font {
+            let mut data = egui::FontData::from_static(bytes);
+            data.index = index;
+            fonts.font_data.insert(name.into(), data.into());
+            regular_names.push(name.to_string());
         }
     }
-    last
-}
-
-/// System fonts with Japanese glyphs: Noto Sans CJK on Linux, Yu Gothic / Meiryo on Windows.
-fn cjk_font_paths() -> (Vec<String>, Vec<String>) {
-    let noto = "/usr/share/fonts/noto-cjk";
-    let win = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
-    let regular = vec![
-        format!("{noto}/NotoSansCJK-Medium.ttc"),
-        format!("{noto}/NotoSansCJK-Regular.ttc"),
-        format!("{win}\\Fonts\\YuGothM.ttc"),
-        format!("{win}\\Fonts\\meiryo.ttc"),
-        format!("{win}\\Fonts\\msgothic.ttc"),
-    ];
-    let bold = vec![
-        format!("{noto}/NotoSansCJK-Bold.ttc"),
-        format!("{win}\\Fonts\\YuGothB.ttc"),
-        format!("{win}\\Fonts\\meiryob.ttc"),
-    ];
-    (regular, bold)
-}
-
-/// Loads a system CJK font (for Japanese labels). Returns true if found.
-pub fn setup(ctx: &egui::Context) -> bool {
-    let mut fonts = egui::FontDefinitions::default();
-    let (regular_paths, bold_paths) = cjk_font_paths();
-    let regular = read_first(&regular_paths);
-    let boldf = read_first(&bold_paths);
-    let have_cjk = regular.is_ok();
-
-    let defaults = fonts.families[&FontFamily::Proportional].clone();
-    if let Ok(bytes) = regular {
-        // Index 0 of each collection is the Japanese face.
-        fonts.font_data.insert("noto".into(), egui::FontData::from_owned(bytes).into());
-        fonts.families.get_mut(&FontFamily::Proportional).unwrap().insert(0, "noto".into());
+    for (name, font) in order(("cjk-ja-bold", ja_bold), ("cjk-zh-bold", zh_bold)) {
+        if let Some((bytes, index)) = font {
+            let mut data = egui::FontData::from_static(bytes);
+            data.index = index;
+            fonts.font_data.insert(name.into(), data.into());
+            bold_names.push(name.to_string());
+        }
     }
-    let mut bold_family = defaults;
-    if let Ok(bytes) = boldf {
-        fonts.font_data.insert("noto-bold".into(), egui::FontData::from_owned(bytes).into());
-        bold_family.insert(0, "noto-bold".into());
-    } else if have_cjk {
-        bold_family.insert(0, "noto".into());
+    if bold_names.is_empty() {
+        bold_names = regular_names.clone();
+    }
+    let have_cjk = !regular_names.is_empty();
+    let prop = fonts.families.get_mut(&FontFamily::Proportional).unwrap();
+    for (i, n) in regular_names.iter().enumerate() {
+        prop.insert(i, n.clone());
     }
     // Built-in Hack font as the last fallback: it has arrows (← ↑ → ↓ ⇄) that some systems lack.
-    fonts.families.get_mut(&FontFamily::Proportional).unwrap().push("Hack".into());
+    prop.push("Hack".into());
+    let mut bold_family = bold_names;
+    bold_family.extend(defaults);
     bold_family.push("Hack".into());
     fonts.families.insert(FontFamily::Name("bold".into()), bold_family);
     ctx.set_fonts(fonts);
+    have_cjk
+}
+
+/// Fonts and the monochrome style. Returns true if a CJK font was found.
+pub fn setup(ctx: &egui::Context) -> bool {
+    let have_cjk = apply_fonts(ctx, crate::i18n::lang());
 
     let mut style = (*ctx.global_style()).clone();
     let v = &mut style.visuals;
@@ -146,12 +179,14 @@ pub fn card() -> egui::Frame {
         .shadow(egui::Shadow { offset: [0, 8], blur: 28, spread: 0, color: Color32::from_black_alpha(110) })
 }
 
-/// Card header: bold title + optional Japanese subtitle.
+/// Card header: bold title in the current language + a small subtitle
+/// (Japanese under English/Malay, English under Chinese/Japanese). `title` is the English text.
 pub fn card_title(ui: &mut Ui, title: &str, jp: &str, cjk: bool) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(title).font(bold(20.0)).color(Color32::WHITE));
+        ui.label(egui::RichText::new(crate::i18n::t(title)).font(bold(20.0)).color(Color32::WHITE));
+        let sub = crate::i18n::subtitle(title, jp);
         if cjk && !jp.is_empty() {
-            ui.label(egui::RichText::new(jp).size(14.0).color(ACCENT));
+            ui.label(egui::RichText::new(sub).size(14.0).color(ACCENT));
         }
     });
     ui.add_space(4.0);
@@ -252,6 +287,9 @@ pub fn star(painter: &egui::Painter, c: Pos2, size: f32, color: Color32) {
 
 /// Gradient pill button with hover glow and press bounce.
 pub fn fancy_button(ui: &mut Ui, label: &str, size: Vec2, c1: Color32, c2: Color32, enabled: bool) -> Response {
+    // Grow to fit longer (translated) labels.
+    let text_w = ui.painter().layout_no_wrap(label.to_string(), bold(15.0), Color32::WHITE).size().x;
+    let size = Vec2::new(size.x.max(text_w + 30.0), size.y);
     let (rect, resp) = // Sense::CLICK (not click()) so buttons never take keyboard focus: otherwise Space/Enter
     // during the keyboard test would "press" the last-clicked button (e.g. Reset).
     ui.allocate_exact_size(size, if enabled { Sense::CLICK } else { Sense::hover() });
@@ -515,7 +553,7 @@ pub struct Mascot {
 
 impl Mascot {
     pub fn new() -> Self {
-        Self { msg: "Hi! Let's check your hardware~ ♪".into(), msg_since: 0.0, next: None, happy_until: 1.5, now: 0.0 }
+        Self { msg: crate::i18n::t("Hi! Let's check your hardware~ ♪").into(), msg_since: 0.0, next: None, happy_until: 1.5, now: 0.0 }
     }
 
     pub fn say(&mut self, msg: impl Into<String>) {

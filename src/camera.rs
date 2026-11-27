@@ -5,6 +5,7 @@
 //! they press Stop or leave the tab. Frames stay in memory for the preview; nothing is
 //! recorded or sent anywhere.
 
+use crate::i18n::t;
 use crate::theme::{self, alpha, Mascot};
 use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use std::collections::VecDeque;
@@ -210,29 +211,29 @@ impl CameraTest {
         let mut lines = Vec::new();
         let status = match (&self.summary, &self.error) {
             (_, Some(e)) => {
-                lines.push(format!("Couldn't open the camera: {e}"));
+                lines.push(tr!("Couldn't open the camera: {0}", e));
                 Status::Issue
             }
             (None, None) => {
                 if self.cams.as_ref().is_some_and(|c| c.is_empty()) {
-                    lines.push("No camera found".into());
+                    lines.push(t("No camera found").into());
                 }
                 Status::NotTested
             }
             (Some(s), None) => {
-                lines.push(format!("Camera: {}", s.name));
+                lines.push(tr!("Camera: {0}", s.name));
                 if s.frames == 0 {
-                    lines.push("No picture received yet".into());
+                    lines.push(t("No picture received yet").into());
                     Status::InProgress
                 } else {
-                    lines.push(format!("Picture: {}×{} {}", s.size.0, s.size.1, s.format));
+                    lines.push(tr!("Picture: {0}×{1} {2}", s.size.0, s.size.1, s.format));
                     if s.best_fps > 0.0 {
-                        lines.push(format!("Frame rate: {:.0} fps (measured)", s.best_fps));
+                        lines.push(tr!("Frame rate: {0} fps (measured)", format!("{:.0}", s.best_fps)));
                     }
                     if s.saw_light {
                         Status::Pass
                     } else {
-                        lines.push("The picture stayed dark: is the lens covered or the privacy shutter closed?".into());
+                        lines.push(t("The picture stayed dark: is the lens covered or the privacy shutter closed?").into());
                         Status::Issue
                     }
                 }
@@ -258,17 +259,17 @@ impl CameraTest {
         let live = self.running() && self.frame_info.is_some();
 
         if self.error.is_some() {
-            mascot.say("I can't see through the camera… (；ω；)");
+            mascot.say(t("I can't see through the camera… (；ω；)"));
         } else if cams.is_empty() {
-            mascot.say("No camera found… is it plugged in? (・_・;)");
+            mascot.say(t("No camera found… is it plugged in? (・_・;)"));
         } else if dark {
-            mascot.say("It's all dark… is the lens covered? (・_・;)");
+            mascot.say(t("It's all dark… is the lens covered? (・_・;)"));
         } else if live {
-            mascot.say("I can see you! Looking good~ (≧▽≦)");
+            mascot.say(t("I can see you! Looking good~ (≧▽≦)"));
         } else if self.running() {
-            mascot.say("Waking the camera up…");
+            mascot.say(t("Waking the camera up…"));
         } else {
-            mascot.say("Press Start and say cheese~ ♪");
+            mascot.say(t("Press Start and say cheese~ ♪"));
         }
 
         theme::card().show(ui, |ui| {
@@ -276,9 +277,9 @@ impl CameraTest {
                 theme::card_title(ui, "Camera", "カメラ", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (label, c1, c2) = if self.running() {
-                        ("■  Stop camera", theme::LIGHT, theme::STEEL)
+                        (t("■  Stop camera"), theme::LIGHT, theme::STEEL)
                     } else {
-                        ("●  Start camera", theme::ACCENT, theme::SILVER)
+                        (t("●  Start camera"), theme::ACCENT, theme::SILVER)
                     };
                     if theme::fancy_button(ui, label, Vec2::new(160.0, 34.0), c1, c2, !cams.is_empty()).clicked() {
                         if self.running() {
@@ -288,16 +289,16 @@ impl CameraTest {
                         }
                     }
                     ui.add_space(6.0);
-                    let mirror = if self.mirror { "⇋ Mirror: on" } else { "⇋ Mirror: off" };
+                    let mirror = if self.mirror { t("⇋ Mirror: on") } else { t("⇋ Mirror: off") };
                     if theme::fancy_button(ui, mirror, Vec2::new(130.0, 34.0), theme::SILVER, theme::STEEL, true)
-                        .on_hover_text("Flip the picture like a mirror")
+                        .on_hover_text(t("Flip the picture like a mirror"))
                         .clicked()
                     {
                         self.mirror = !self.mirror;
                     }
                     ui.add_space(6.0);
                     if theme::fancy_button(ui, "↻", Vec2::new(40.0, 34.0), theme::SILVER, theme::STEEL, !self.running())
-                        .on_hover_text("Look for cameras again")
+                        .on_hover_text(t("Look for cameras again"))
                         .clicked()
                     {
                         self.refresh();
@@ -307,7 +308,7 @@ impl CameraTest {
 
             if cams.len() > 1 {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Camera").size(13.0).color(theme::TEXT_DIM));
+                    ui.label(egui::RichText::new(t("Camera")).size(13.0).color(theme::TEXT_DIM));
                     let names: Vec<String> = cams.iter().map(|c| short(&c.name, 32)).collect();
                     let opts: Vec<(usize, &str, &str)> = names.iter().enumerate().map(|(i, n)| (i, n.as_str(), "")).collect();
                     let before = self.selected;
@@ -318,7 +319,7 @@ impl CameraTest {
                 });
             }
             ui.label(
-                egui::RichText::new("The camera is on only while you're on this tab and have pressed Start. Nothing is recorded or sent anywhere.")
+                egui::RichText::new(t("The camera is on only while you're on this tab and have pressed Start. Nothing is recorded or sent anywhere."))
                     .size(12.5)
                     .color(theme::TEXT_DIM),
             );
@@ -343,20 +344,20 @@ impl CameraTest {
                 }
                 _ => {
                     let msg = if let Some(e) = &self.error {
-                        format!("Couldn't open the camera\n{}", short(e, 90))
+                        format!("{}\n{}", t("Couldn't open the camera"), short(e, 90))
                     } else if cams.is_empty() {
-                        "No camera found".to_string()
+                        t("No camera found").to_string()
                     } else if self.running() {
-                        "Starting the camera…".to_string()
+                        t("Starting the camera…").to_string()
                     } else {
-                        "Press Start to turn on the camera".to_string()
+                        t("Press Start to turn on the camera").to_string()
                     };
                     p.text(area.center(), Align2::CENTER_CENTER, msg, theme::bold(18.0), alpha(theme::TEXT_DIM, 0.9));
                     if self.error.is_some() {
                         p.text(
                             area.center() + Vec2::new(0.0, 52.0),
                             Align2::CENTER_CENTER,
-                            "Another app may be using it, or camera access is turned off in your privacy settings.",
+                            t("Another app may be using it, or camera access is turned off in your privacy settings."),
                             egui::FontId::proportional(13.0),
                             theme::TEXT_DIM,
                         );
@@ -369,17 +370,17 @@ impl CameraTest {
                 let pulse = 0.6 + 0.4 * ((now * 3.0).sin() as f32).abs();
                 let at = area.left_top() + Vec2::new(26.0, 24.0);
                 p.circle_filled(at, 6.0, alpha(Color32::WHITE, pulse));
-                p.text(at + Vec2::new(12.0, 0.0), Align2::LEFT_CENTER, "LIVE", theme::bold(13.0), Color32::WHITE);
+                p.text(at + Vec2::new(12.0, 0.0), Align2::LEFT_CENTER, t("LIVE"), theme::bold(13.0), Color32::WHITE);
             }
 
             ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 let s = self.summary.clone().unwrap_or_default();
                 let fps_now = self.worker.as_ref().map_or(0.0, |w| w.shared.lock().map_or(0.0, |sh| sh.fps));
-                chip(ui, &if s.size.0 > 0 { format!("{}×{}", s.size.0, s.size.1) } else { "Resolution".into() }, s.size.0 > 0);
-                chip(ui, &if s.format.is_empty() { "Format".into() } else { s.format.clone() }, !s.format.is_empty());
-                chip(ui, &if live { format!("{fps_now:.0} fps") } else { "Frame rate".into() }, live && fps_now > 0.0);
-                chip(ui, "Picture has light", s.saw_light);
+                chip(ui, &if s.size.0 > 0 { format!("{}×{}", s.size.0, s.size.1) } else { t("Resolution").into() }, s.size.0 > 0);
+                chip(ui, &if s.format.is_empty() { t("Format").into() } else { s.format.clone() }, !s.format.is_empty());
+                chip(ui, &if live { format!("{fps_now:.0} fps") } else { t("Frame rate").into() }, live && fps_now > 0.0);
+                chip(ui, t("Picture has light"), s.saw_light);
                 if let Some(name) = cams.get(self.selected).map(|c| c.name.as_str()) {
                     ui.add_space(6.0);
                     ui.label(egui::RichText::new(name).size(12.5).color(theme::TEXT_DIM));
@@ -387,7 +388,7 @@ impl CameraTest {
             });
             if dark {
                 ui.label(
-                    egui::RichText::new("⚠ The picture is very dark: open the privacy shutter, uncover the lens, or turn on a light. Webcams also slow down in the dark.")
+                    egui::RichText::new(t("⚠ The picture is very dark: open the privacy shutter, uncover the lens, or turn on a light. Webcams also slow down in the dark."))
                         .font(theme::bold(13.0))
                         .color(Color32::WHITE),
                 );
@@ -438,7 +439,7 @@ fn publish(shared: &Mutex<Shared>, frame: Frame, fps: f32) {
 
 fn list_cameras() -> Vec<CamInfo> {
     if demo() {
-        return vec![CamInfo { name: "Demo camera (test pattern)".into(), id: Default::default() }];
+        return vec![CamInfo { name: t("Demo camera (test pattern)").into(), id: Default::default() }];
     }
     backend::list()
 }
@@ -627,7 +628,7 @@ mod backend {
     }
 
     pub fn capture(_: CamInfo, _: &AtomicBool, _: &Mutex<Shared>) -> Result<(), String> {
-        Err("The camera test isn't available on this system yet".into())
+        Err(t("The camera test isn't available on this system yet").into())
     }
 }
 

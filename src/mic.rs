@@ -4,6 +4,7 @@
 //! press Stop or leave the Audio tab. Recordings stay in memory and are never saved.
 
 use crate::speakers::SpeakerTest;
+use crate::i18n::t;
 use crate::theme::{self, alpha, Mascot};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, Vec2};
@@ -84,20 +85,20 @@ impl MicTest {
         };
         let mut lines = Vec::new();
         if let Some(e) = &self.error {
-            lines.push(format!("Couldn't open the microphone: {e}"));
+            lines.push(tr!("Couldn't open the microphone: {0}", e));
         }
         if !self.device_name.is_empty() {
-            lines.push(format!("Input: {}", self.device_name));
+            lines.push(tr!("Input: {0}", self.device_name));
         }
         if silent {
-            lines.push("No signal at all: microphone muted or blocked?".into());
+            lines.push(t("No signal at all: microphone muted or blocked?").into());
         } else if let Some(db) = self.max_db {
-            lines.push(format!("Loudest level: {db:.0} dB"));
+            lines.push(tr!("Loudest level: {0} dB", format!("{db:.0}")));
         }
         lines.push(match self.playback_ok {
-            Some(true) => "Recording played back clearly".into(),
-            Some(false) => "Recording sounded bad (quiet, noisy or crackly)".into(),
-            None => "Record & play back: not tried".into(),
+            Some(true) => t("Recording played back clearly").into(),
+            Some(false) => t("Recording sounded bad (quiet, noisy or crackly)").into(),
+            None => t("Record & play back: not tried").into(),
         });
         Section { title: "Microphone", jp: "マイク", status, lines }
     }
@@ -200,15 +201,15 @@ impl MicTest {
 
         if self.is_on() {
             if recording_progress.is_some() {
-                mascot.say("Recording… say something cute~ (・∀・)");
+                mascot.say(t("Recording… say something cute~ (・∀・)"));
             } else if playing_back {
-                mascot.say("Here's what your mic heard! ♪");
+                mascot.say(t("Here's what your mic heard! ♪"));
             } else if now - self.started_at > 2.0 && !self.signal_seen {
-                mascot.say("Total silence… is your mic muted? (；ω；)");
+                mascot.say(t("Total silence… is your mic muted? (；ω；)"));
             } else if now - self.started_at > 3.0 && self.max_db.is_none_or(|d| d < -70.0) {
-                mascot.say("I can't hear anything… check your mic (；ω；)");
+                mascot.say(t("I can't hear anything… check your mic (；ω；)"));
             } else {
-                mascot.say("Talk, clap or snap your fingers~ ♪");
+                mascot.say(t("Talk, clap or snap your fingers~ ♪"));
             }
         }
 
@@ -217,9 +218,9 @@ impl MicTest {
                 theme::card_title(ui, "Microphone", "マイク", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (label, c1, c2) = if self.is_on() {
-                        ("■  Stop mic", Color32::from_rgb(120, 120, 126), theme::STEEL)
+                        (t("■  Stop mic"), Color32::from_rgb(120, 120, 126), theme::STEEL)
                     } else {
-                        ("🎤  Start mic", theme::ACCENT, theme::SILVER)
+                        (t("🎤  Start mic"), theme::ACCENT, theme::SILVER)
                     };
                     if theme::fancy_button(ui, label, Vec2::new(150.0, 36.0), c1, c2, true).clicked() {
                         if self.is_on() {
@@ -232,7 +233,7 @@ impl MicTest {
                     }
                     ui.add_space(8.0);
                     let can_record = self.is_on() && recording_progress.is_none() && !playing_back;
-                    if theme::fancy_button(ui, "●  Record 3 s & play back", Vec2::new(230.0, 36.0), theme::LIGHT, theme::SILVER, can_record).clicked() {
+                    if theme::fancy_button(ui, t("●  Record 3 s & play back"), Vec2::new(230.0, 36.0), theme::LIGHT, theme::SILVER, can_record).clicked() {
                         if let Ok(mut s) = self.shared.lock() {
                             s.recording = Some(Vec::with_capacity((self.rate as f32 * RECORD_SECS) as usize));
                         }
@@ -245,7 +246,7 @@ impl MicTest {
             });
 
             if let Some(e) = &self.error {
-                ui.colored_label(theme::ACCENT, format!("Couldn't open the microphone: {e}"));
+                ui.colored_label(theme::ACCENT, tr!("Couldn't open the microphone: {0}", e));
             }
 
             // Level meter (-60 dB … 0 dB) with peak hold.
@@ -263,13 +264,13 @@ impl MicTest {
                 p.line_segment([Pos2::new(x, bar.top() + 3.0), Pos2::new(x, bar.bottom() - 3.0)], Stroke::new(2.5, Color32::WHITE));
             }
             let label = if !self.is_on() {
-                "Microphone off".to_string()
+                t("Microphone off").to_string()
             } else if let Some(prog) = recording_progress {
-                format!("● Recording… {:.1} s", prog * RECORD_SECS)
+                tr!("● Recording… {0} s", format!("{:.1}", prog * RECORD_SECS))
             } else if playing_back {
-                "▶ Playing back".to_string()
+                t("▶ Playing back").to_string()
             } else if now - self.started_at > 2.0 && !self.signal_seen {
-                "No signal: is the microphone muted or blocked?".to_string()
+                t("No signal: is the microphone muted or blocked?").to_string()
             } else {
                 format!("{:.0} dB", to_db(latest))
             };
@@ -293,16 +294,15 @@ impl MicTest {
             ui.add_space(6.0);
             if self.played_back && !playing_back {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Did your recording sound clear?").font(theme::bold(13.5)).color(Color32::WHITE));
-                    let opts = [(Some(true), "Yes", "It sounded clear"), (Some(false), "No", "Quiet, noisy, crackly or silent")];
+                    ui.label(egui::RichText::new(t("Did your recording sound clear?")).font(theme::bold(13.5)).color(Color32::WHITE));
+                    let opts = [(Some(true), t("Yes"), t("It sounded clear")), (Some(false), t("No"), t("Quiet, noisy, crackly or silent"))];
                     theme::segmented(ui, "mic-ok", &opts, &mut self.playback_ok);
                 });
             }
             ui.label(
-                egui::RichText::new(
-                    "If the meter doesn't move: check the app has microphone access (Windows: Settings → Privacy & security → Microphone) \
-                     and that the right input device is selected in your sound settings. Recordings are never saved.",
-                )
+                egui::RichText::new(t(
+                    "If the meter doesn't move: check the app has microphone access (Windows: Settings → Privacy & security → Microphone) and that the right input device is selected in your sound settings. Recordings are never saved.",
+                ))
                 .size(12.0)
                 .color(theme::TEXT_DIM),
             );

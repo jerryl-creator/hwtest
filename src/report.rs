@@ -1,5 +1,6 @@
 //! Report tab: a summary of every test, which can be copied or saved as text or an image.
 
+use crate::i18n::t;
 use crate::theme::{self, alpha, Mascot};
 use eframe::egui::{self, Color32, Vec2};
 use std::path::PathBuf;
@@ -14,12 +15,12 @@ pub enum Status {
 
 impl Status {
     fn badge(self) -> &'static str {
-        match self {
+        t(match self {
             Status::NotTested => "– Not tested",
             Status::InProgress => "… In progress",
             Status::Pass => "✔ Pass",
             Status::Issue => "⚠ Issue found",
-        }
+        })
     }
 }
 
@@ -37,19 +38,20 @@ pub struct Header {
 
 pub fn to_text(header: &Header, sections: &[Section]) -> String {
     let mut out = String::new();
-    out.push_str(&format!("Nyanspect {} hardware report\n", env!("CARGO_PKG_VERSION")));
-    out.push_str(&format!("Date:     {}\n", now_utc()));
-    out.push_str(&format!("System:   {} ({})\n", os_name(), std::env::consts::ARCH));
-    out.push_str(&format!("Graphics: {}\n", header.renderer));
+    out.push_str(&tr!("Nyanspect {0} hardware report", env!("CARGO_PKG_VERSION")));
+    out.push('\n');
+    out.push_str(&format!("{} {}\n", t("Date:"), now_utc()));
+    out.push_str(&format!("{} {} ({})\n", t("System:"), os_name(), std::env::consts::ARCH));
+    out.push_str(&format!("{} {}\n", t("Graphics:"), header.renderer));
     out.push_str(&"=".repeat(48));
     out.push('\n');
     for s in sections {
-        out.push_str(&format!("\n{:<12} {}\n", s.title, s.status.badge()));
+        out.push_str(&format!("\n{}  {}\n", t(s.title), s.status.badge()));
         for l in &s.lines {
             out.push_str(&format!("  - {l}\n"));
         }
     }
-    out.push_str("\nMade with Nyanspect: https://github.com/jerryl-creator/nyanspect\n");
+    out.push_str(&format!("\n{} https://github.com/jerryl-creator/nyanspect\n", t("Made with Nyanspect:")));
     out
 }
 
@@ -108,11 +110,11 @@ impl ReportTab {
         let count = |st: Status| sections.iter().filter(|s| s.status == st).count();
         let (pass, issue, tested) = (count(Status::Pass), count(Status::Issue), sections.len() - count(Status::NotTested));
         if tested == 0 {
-            mascot.say("Run some tests and your report card appears here~");
+            mascot.say(t("Run some tests and your report card appears here~"));
         } else if issue > 0 {
-            mascot.say(format!("{issue} thing(s) need a look… see below (；ω；)"));
+            mascot.say(tr!("{0} thing(s) need a look… see below (；ω；)", issue));
         } else {
-            mascot.say("Here's your hardware report card~ ♪");
+            mascot.say(t("Here's your hardware report card~ ♪"));
         }
 
         theme::card().show(ui, |ui| {
@@ -120,7 +122,7 @@ impl ReportTab {
                 theme::card_title(ui, "Report", "レポート", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let b = Vec2::new(150.0, 34.0);
-                    if theme::fancy_button(ui, "Save as image", b, theme::SILVER, theme::STEEL, true).clicked() {
+                    if theme::fancy_button(ui, t("Save as image"), b, theme::SILVER, theme::STEEL, true).clicked() {
                         let path = save_dir().join(format!("nyanspect-report-{}.png", stamp()));
                         let shown = path.display().to_string();
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::ScreenshotCallback::new(move |img| {
@@ -131,30 +133,30 @@ impl ReportTab {
                                 }
                             }
                         })));
-                        self.message = Some((format!("Saved image to {shown}"), now));
+                        self.message = Some((tr!("Saved image to {0}", shown), now));
                     }
                     ui.add_space(6.0);
-                    if theme::fancy_button(ui, "Save as text", b, theme::LIGHT, theme::SILVER, true).clicked() {
+                    if theme::fancy_button(ui, t("Save as text"), b, theme::LIGHT, theme::SILVER, true).clicked() {
                         let path = save_dir().join(format!("nyanspect-report-{}.txt", stamp()));
                         self.message = Some((
                             match std::fs::write(&path, to_text(header, sections)) {
-                                Ok(()) => format!("Saved to {}", path.display()),
-                                Err(e) => format!("Couldn't save: {e}"),
+                                Ok(()) => tr!("Saved to {0}", path.display()),
+                                Err(e) => tr!("Couldn't save: {0}", e),
                             },
                             now,
                         ));
                     }
                     ui.add_space(6.0);
-                    if theme::fancy_button(ui, "Copy", Vec2::new(100.0, 34.0), theme::ACCENT, theme::SILVER, true).clicked() {
+                    if theme::fancy_button(ui, t("Copy"), Vec2::new(100.0, 34.0), theme::ACCENT, theme::SILVER, true).clicked() {
                         ui.ctx().copy_text(to_text(header, sections));
-                        self.message = Some(("Copied! Paste it anywhere.".to_string(), now));
+                        self.message = Some((t("Copied! Paste it anywhere.").to_string(), now));
                     }
                 });
             });
             ui.label(
                 egui::RichText::new(format!(
-                    "{pass} passed · {issue} with issues · {} not tested   ·   {} · {} · {}",
-                    count(Status::NotTested),
+                    "{}   ·   {} · {} · {}",
+                    tr!("{0} passed · {1} with issues · {2} not tested", pass, issue, count(Status::NotTested)),
                     os_name(),
                     header.renderer,
                     now_utc()

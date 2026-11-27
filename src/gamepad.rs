@@ -1,5 +1,6 @@
 //! Gamepad test: buttons, D-pad, triggers, sticks (with drift detection) and rumble.
 
+use crate::i18n::t;
 use crate::theme::{self, alpha, lerp_color, Mascot};
 use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use gilrs::{Axis, Button, GamepadId, Gilrs};
@@ -304,20 +305,26 @@ impl GamepadTest {
         };
         let mut lines = Vec::new();
         if let Some(n) = &self.name {
-            lines.push(format!("Controller: {n} ({} layout)", style.name()));
+            lines.push(tr!("Controller: {0} ({1} layout)", n, style.name()));
         }
-        lines.push(format!("{done} / {} buttons work", BUTTONS.len()));
+        lines.push(tr!("{0} / {1} buttons work", done, BUTTONS.len()));
         if done > 0 && done < BUTTONS.len() {
-            let missing: Vec<&str> = BUTTONS.iter().filter(|b| !self.tested.contains(b)).map(|b| label(style, *b)).collect();
-            lines.push(format!("Not pressed yet: {}", missing.join(", ")));
+            let missing: Vec<&str> = BUTTONS.iter().filter(|b| !self.tested.contains(b)).map(|b| t(label(style, *b))).collect();
+            lines.push(tr!("Not pressed yet: {0}", missing.join(", ")));
         }
-        for (side, w) in [("Left", &self.left), ("Right", &self.right)] {
-            let range = if w.max_reach > 0.9 { "full range" } else if w.max_reach > 0.05 { "not pushed to the edge yet" } else { "not tested" };
-            let drift = w.drift.map_or(String::new(), |v| format!(", DRIFT: rests {:.0}% off-centre", v.length() * 100.0));
-            lines.push(format!("{side} stick: {range}{drift}"));
+        for (left, w) in [(true, &self.left), (false, &self.right)] {
+            let range = t(if w.max_reach > 0.9 {
+                "full range"
+            } else if w.max_reach > 0.05 {
+                "not pushed to the edge yet"
+            } else {
+                "not tested"
+            });
+            let drift = w.drift.map_or(String::new(), |v| tr!(", DRIFT: rests {0}% off-centre", format!("{:.0}", v.length() * 100.0)));
+            lines.push(if left { tr!("Left stick: {0}{1}", range, drift) } else { tr!("Right stick: {0}{1}", range, drift) });
         }
         if self.rumble_tried {
-            lines.push("Rumble: tried".into());
+            lines.push(t("Rumble: tried").into());
         }
         Section { title: "Gamepad", jp: "ゲームパッド", status, lines }
     }
@@ -369,42 +376,42 @@ impl GamepadTest {
         let style = self.style();
 
         if self.left.drift.is_some() || self.right.drift.is_some() {
-            mascot.say("A stick isn't centring… stick drift! (；ω；)");
+            mascot.say(t("A stick isn't centring… stick drift! (；ω；)"));
         } else if !connected {
-            mascot.say("Plug in or pair a controller, then press a button~");
+            mascot.say(t("Plug in or pair a controller, then press a button~"));
         } else if done == BUTTONS.len() && self.left_ok() && self.right_ok() {
-            mascot.say("Your controller is perfect! ＼(^o^)／");
+            mascot.say(t("Your controller is perfect! ＼(^o^)／"));
         } else {
-            mascot.say("Press every button and roll both sticks around~ ♪");
+            mascot.say(t("Press every button and roll both sticks around~ ♪"));
         }
 
         theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
                 theme::card_title(ui, "Gamepad", "ゲームパッド", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::fancy_button(ui, "↺ Reset", Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
+                    if theme::fancy_button(ui, t("↺ Reset"), Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
                         self.reset();
                     }
                     ui.add_space(6.0);
-                    let rumble = theme::fancy_button(ui, "〰 Rumble", Vec2::new(120.0, 32.0), theme::ACCENT, theme::SILVER, ff)
-                        .on_hover_text(if ff { "Vibrate the controller" } else { "This controller doesn't support vibration here" });
+                    let rumble = theme::fancy_button(ui, t("〰 Rumble"), Vec2::new(120.0, 32.0), theme::ACCENT, theme::SILVER, ff)
+                        .on_hover_text(if ff { t("Vibrate the controller") } else { t("This controller doesn't support vibration here") });
                     if rumble.clicked() {
                         self.rumble();
                     }
                     ui.add_space(10.0);
                     let label = match (&self.error, &self.name, connected) {
-                        (Some(e), _, _) => format!("Controllers unavailable: {e}"),
+                        (Some(e), _, _) => tr!("Controllers unavailable: {0}", e),
                         (_, Some(n), true) => n.clone(),
-                        _ => "No controller connected".to_string(),
+                        _ => t("No controller connected").to_string(),
                     };
                     ui.label(egui::RichText::new(label).size(12.5).color(theme::TEXT_DIM));
                 });
             });
 
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Layout").size(13.0).color(theme::TEXT_DIM));
+                ui.label(egui::RichText::new(t("Layout")).size(13.0).color(theme::TEXT_DIM));
                 let opts = [
-                    (Choice::Auto, "Auto", "Follow the connected controller"),
+                    (Choice::Auto, t("Auto"), t("Follow the connected controller")),
                     (Choice::Xbox, "Xbox", "A B X Y, LB / RB, LT / RT"),
                     (Choice::PlayStation, "PlayStation", "Cross Circle Square Triangle, L1 / R1, L2 / R2"),
                     (Choice::Nintendo, "Nintendo", "B A Y X, L / R, ZL / ZR"),
@@ -412,9 +419,9 @@ impl GamepadTest {
                 theme::segmented(ui, "gp-layout", &opts, &mut self.choice);
                 ui.add_space(8.0);
                 let note = if self.choice == Choice::Auto {
-                    if connected { format!("Detected: {}", style.name()) } else { "Detects your controller when you plug it in".into() }
+                    if connected { tr!("Detected: {0}", style.name()) } else { t("Detects your controller when you plug it in").into() }
                 } else {
-                    format!("Showing: {}", style.name())
+                    tr!("Showing: {0}", style.name())
                 };
                 ui.label(egui::RichText::new(note).size(12.5).color(theme::TEXT_DIM));
             });
@@ -424,30 +431,33 @@ impl GamepadTest {
 
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
-                ui.label(egui::RichText::new(format!("{done} / {} buttons", BUTTONS.len())).font(theme::bold(13.0)).color(Color32::WHITE));
+                ui.label(egui::RichText::new(tr!("{0} / {1} buttons", done, BUTTONS.len())).font(theme::bold(13.0)).color(Color32::WHITE));
                 ui.add_space(6.0);
                 for b in BUTTONS {
-                    chip(ui, label(style, b), self.tested.contains(&b));
+                    chip(ui, t(label(style, b)), self.tested.contains(&b));
                 }
-                chip(ui, "Left stick full range", self.left_ok());
-                chip(ui, "Right stick full range", self.right_ok());
+                chip(ui, t("Left stick full range"), self.left_ok());
+                chip(ui, t("Right stick full range"), self.right_ok());
             });
-            for (name, d) in [("Left", self.left.drift), ("Right", self.right.drift)] {
+            for (left, d) in [(true, self.left.drift), (false, self.right.drift)] {
                 if let Some(v) = d {
+                    let pct = format!("{:.0}", v.length() * 100.0);
+                    let msg = if left {
+                        tr!("⚠ Left stick drift: it rests at {0}% off-centre instead of the middle. Games may move on their own.", pct)
+                    } else {
+                        tr!("⚠ Right stick drift: it rests at {0}% off-centre instead of the middle. Games may move on their own.", pct)
+                    };
                     ui.label(
-                        egui::RichText::new(format!(
-                            "⚠ {name} stick drift: it rests at {:.0}% off-centre instead of the middle. Games may move on their own.",
-                            v.length() * 100.0
-                        ))
+                        egui::RichText::new(msg)
                         .font(theme::bold(13.0))
                         .color(Color32::WHITE),
                     );
                 }
             }
             ui.label(
-                egui::RichText::new(
-                    "The layout follows your controller; pick another above if a third-party pad looks wrong. \
-                     Let go of both sticks to check for drift. The Guide / PS / Home button may be grabbed by Steam or the Xbox Game Bar.",
+                egui::RichText::new(t(
+                    "The layout follows your controller; pick another above if a third-party pad looks wrong. Let go of both sticks to check for drift. The Guide / PS / Home button may be grabbed by Steam or the Xbox Game Bar.",
+                )
                 )
                 .size(12.0)
                 .color(theme::TEXT_DIM),
@@ -472,7 +482,7 @@ impl GamepadTest {
         theme::vgradient(p, body, 90.0 * s, body_col.0, body_col.1);
         p.rect_stroke(body, 90.0 * s, Stroke::new(1.5, alpha(Color32::WHITE, 0.18)), StrokeKind::Inside);
         if !connected {
-            p.text(c + Vec2::new(0.0, 135.0 * s), Align2::CENTER_CENTER, "No controller", theme::bold(18.0), alpha(theme::TEXT_DIM, 0.9));
+            p.text(c + Vec2::new(0.0, 135.0 * s), Align2::CENTER_CENTER, t("No controller"), theme::bold(18.0), alpha(theme::TEXT_DIM, 0.9));
         }
 
         // A key-like part: held = white glow, tested = silver, else dark.
@@ -537,7 +547,7 @@ impl GamepadTest {
                 let pad = Rect::from_center_size(c + Vec2::new(0.0, -58.0 * s), Vec2::new(150.0 * s, 66.0 * s));
                 theme::vgradient(p, pad, 10.0 * s, Color32::from_rgb(40, 40, 44), Color32::from_rgb(26, 26, 29));
                 p.rect_stroke(pad, 10.0 * s, Stroke::new(1.0, alpha(Color32::WHITE, 0.15)), StrokeKind::Inside);
-                p.text(pad.center(), Align2::CENTER_CENTER, "touchpad", egui::FontId::proportional((11.0 * s).max(9.0)), alpha(theme::TEXT_DIM, 0.7));
+                p.text(pad.center(), Align2::CENTER_CENTER, t("touchpad"), egui::FontId::proportional((11.0 * s).max(9.0)), alpha(theme::TEXT_DIM, 0.7));
                 small(-112.0, -74.0, 56.0, Button::Select);
                 small(112.0, -74.0, 62.0, Button::Start);
                 part(Rect::from_center_size(c + Vec2::new(0.0, 14.0 * s), Vec2::splat(30.0 * s)), 15.0 * s, Button::Mode, "PS");
@@ -595,7 +605,7 @@ impl GamepadTest {
             let pulse = if drift { 1.0 + 0.25 * ((now * 6.0).sin() as f32) } else { 1.0 };
             p.circle_filled(dot, 8.0 * s * pulse, if drift { theme::GLINT } else { Color32::WHITE });
             if drift {
-                p.text(centre + Vec2::new(0.0, r + 14.0), Align2::CENTER_CENTER, "⚠ drift", theme::bold(12.0), Color32::WHITE);
+                p.text(centre + Vec2::new(0.0, r + 14.0), Align2::CENTER_CENTER, t("⚠ drift"), theme::bold(12.0), Color32::WHITE);
             }
         }
     }

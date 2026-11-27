@@ -2,6 +2,7 @@ use crate::chatter::ChatterDetector;
 use crate::layouts::{self, Layout, Size, Style, *};
 use crate::sfx::Sfx;
 use crate::theme::{self, alpha, lerp_color, Mascot};
+use crate::i18n::t;
 use eframe::egui::{self, Align2, Color32, FontId, Key, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -125,20 +126,20 @@ impl KeyboardTest {
             Status::InProgress
         };
         let mut lines = vec![
-            format!("Layout: {} · {}", self.size.label(), self.style.label()),
-            format!("{done} / {total} keys work"),
+            tr!("Layout: {0} · {1}", crate::i18n::t(self.size.label()), crate::i18n::t(self.style.label())),
+            tr!("{0} / {1} keys work", done, total),
         ];
         if done > 0 && done < total {
             let missing: Vec<String> = self.layout.caps.iter().filter(|c| !self.tested.contains(&c.key)).map(|c| pretty(c.key)).collect();
             let shown = missing.iter().take(15).cloned().collect::<Vec<_>>().join(", ");
-            let more = if missing.len() > 15 { format!(" (+{} more)", missing.len() - 15) } else { String::new() };
-            lines.push(format!("Not pressed yet: {shown}{more}"));
+            let more = if missing.len() > 15 { tr!(" (+{0} more)", missing.len() - 15) } else { String::new() };
+            lines.push(tr!("Not pressed yet: {0}{1}", shown, more));
         }
         for (key, n) in worst {
-            lines.push(format!("Chatter: {} registered twice ×{n} (worn or dirty switch?)", pretty(key)));
+            lines.push(tr!("Chatter: {0} registered twice ×{1} (worn or dirty switch?)", pretty(key), n));
         }
         if self.max_held >= 2 {
-            lines.push(format!("Rollover: up to {} keys registered at once", self.max_held));
+            lines.push(tr!("Rollover: up to {0} keys registered at once", self.max_held));
         }
         Section { title: "Keyboard", jp: "キーボード", status, lines }
     }
@@ -170,7 +171,7 @@ impl KeyboardTest {
                             self.pending.push((key, first));
                             if self.chatter.press(key, now as f64) {
                                 self.chatter_at.insert(key, now);
-                                self.log.push_front((format!("⚠ {} chatter", pretty(key)), now));
+                                self.log.push_front((tr!("⚠ {0} chatter", pretty(key)), now));
                             } else {
                                 self.log.push_front((pretty(key), now));
                             }
@@ -204,14 +205,14 @@ impl KeyboardTest {
 
         match done {
             _ if !worst.is_empty() => {
-                mascot.say(format!("Hmm… {} pressed itself twice (；ω；)", pretty(worst[0].0)))
+                mascot.say(tr!("Hmm… {0} pressed itself twice (；ω；)", pretty(worst[0].0)))
             }
-            0 => mascot.say("Press any key on your keyboard~ ♪"),
-            d if d == total => mascot.say("All keys work! Sugoi~! ＼(^o^)／"),
-            _ if frac > 0.75 => mascot.say("Almost there, ganbatte!"),
-            _ if frac > 0.4 => mascot.say("Nice, keep going nya~"),
-            _ if self.size == Size::Full => mascot.say("Yay! Try every key, even the numpad!"),
-            _ => mascot.say("Yay! Try every key on your keyboard!"),
+            0 => mascot.say(t("Press any key on your keyboard~ ♪")),
+            d if d == total => mascot.say(t("All keys work! Sugoi~! ＼(^o^)／")),
+            _ if frac > 0.75 => mascot.say(t("Almost there, ganbatte!")),
+            _ if frac > 0.4 => mascot.say(t("Nice, keep going nya~")),
+            _ if self.size == Size::Full => mascot.say(t("Yay! Try every key, even the numpad!")),
+            _ => mascot.say(t("Yay! Try every key on your keyboard!")),
         }
 
         // Centre the card vertically in any space left over (measured from the previous frame).
@@ -222,7 +223,7 @@ impl KeyboardTest {
             ui.horizontal(|ui| {
                 theme::card_title(ui, "Keyboard test", "キーボードテスト", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::fancy_button(ui, "↺ Reset", Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
+                    if theme::fancy_button(ui, t("↺ Reset"), Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
                         self.tested.clear();
                         self.log.clear();
                         self.chatter.clear();
@@ -231,26 +232,26 @@ impl KeyboardTest {
                         self.celebrated = false;
                     }
                     ui.add_space(6.0);
-                    let label = if self.sfx.enabled { "★ SFX: ON" } else { "SFX: OFF" };
+                    let label = if self.sfx.enabled { t("★ SFX: ON") } else { t("SFX: OFF") };
                     let (c1, c2) = if self.sfx.enabled { (theme::ACCENT, theme::SILVER) } else { (theme::STEEL, Color32::from_rgb(60, 60, 64)) };
                     if theme::fancy_button(ui, label, Vec2::new(108.0, 32.0), c1, c2, true)
-                        .on_hover_text("Anime sound effects (pop-ups and sounds) when you press keys")
+                        .on_hover_text(t("Anime sound effects (pop-ups and sounds) when you press keys"))
                         .clicked()
                     {
                         self.sfx.enabled = !self.sfx.enabled;
                     }
                     ui.add_space(12.0);
-                    legend(ui, Color32::WHITE, "Holding");
-                    legend(ui, Color32::from_rgb(130, 130, 136), "Works");
-                    legend(ui, Color32::from_rgb(44, 44, 48), "Not tested");
+                    legend(ui, Color32::WHITE, t("Holding"));
+                    legend(ui, Color32::from_rgb(130, 130, 136), t("Works"));
+                    legend(ui, Color32::from_rgb(44, 44, 48), t("Not tested"));
                 });
             });
 
             // Layout picker: size and ANSI/ISO style.
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Layout").size(13.0).color(theme::TEXT_DIM));
-                let sizes: Vec<_> = Size::ALL.iter().map(|s| (*s, s.label(), s.hint())).collect();
-                let styles: Vec<_> = Style::ALL.iter().map(|s| (*s, s.label(), s.hint())).collect();
+                ui.label(egui::RichText::new(t("Layout")).size(13.0).color(theme::TEXT_DIM));
+                let sizes: Vec<_> = Size::ALL.iter().map(|s| (*s, t(s.label()), t(s.hint()))).collect();
+                let styles: Vec<_> = Style::ALL.iter().map(|s| (*s, t(s.label()), t(s.hint()))).collect();
                 let changed = theme::segmented(ui, "kb-size", &sizes, &mut self.size)
                     | {
                         ui.add_space(10.0);
@@ -262,7 +263,7 @@ impl KeyboardTest {
                 }
                 if self.size == Size::Compact {
                     ui.add_space(10.0);
-                    ui.label(egui::RichText::new("Fn can't be tested: it never reaches apps.").size(12.0).color(theme::TEXT_DIM));
+                    ui.label(egui::RichText::new(t("Fn can't be tested: it never reaches apps.")).size(12.0).color(theme::TEXT_DIM));
                 }
             });
 
@@ -296,7 +297,7 @@ impl KeyboardTest {
                     let sx = fill.left() + ((now * 0.6) % 1.0) * fill.width();
                     theme::glow(p, Pos2::new(sx, fill.center().y), 14.0, alpha(Color32::WHITE, 0.5));
                 }
-                p.text(bar.center(), Align2::CENTER_CENTER, format!("{done} / {total} keys"), theme::bold(12.5), Color32::WHITE);
+                p.text(bar.center(), Align2::CENTER_CENTER, tr!("{0} / {1} keys", done, total), theme::bold(12.5), Color32::WHITE);
 
                 ui.add_space(12.0);
                 // Rollover: how many keys register at once.
@@ -307,13 +308,12 @@ impl KeyboardTest {
                     .inner_margin(egui::Margin::symmetric(9, 2))
                     .show(ui, |ui| {
                         let col = if held >= 2 { theme::INK } else { theme::TEXT };
-                        ui.label(egui::RichText::new(format!("Held: {held} · best {}", self.max_held)).font(theme::bold(12.5)).color(col));
+                        ui.label(egui::RichText::new(tr!("Held: {0} · best {1}", held, self.max_held)).font(theme::bold(12.5)).color(col));
                     })
                     .response
-                    .on_hover_text(
-                        "Rollover test: hold several keys at once. If a key you're holding doesn't light up, \
-                         your keyboard can't register that many keys together (or has ghosting).",
-                    );
+                    .on_hover_text(t(
+                        "Rollover test: hold several keys at once. If a key you're holding doesn't light up, your keyboard can't register that many keys together (or has ghosting).",
+                    ));
                 ui.add_space(6.0);
                 // recent keys as fading chips
                 for (name, t) in self.log.iter().take(6) {
@@ -332,7 +332,7 @@ impl KeyboardTest {
             ui.add_space(4.0);
             if !worst.is_empty() {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new("⚠ Chatter (one press counted twice):").font(theme::bold(13.0)).color(Color32::WHITE));
+                    ui.label(egui::RichText::new(t("⚠ Chatter (one press counted twice):")).font(theme::bold(13.0)).color(Color32::WHITE));
                     for (key, n) in worst.iter().take(8) {
                         egui::Frame::new()
                             .fill(Color32::WHITE)
@@ -342,12 +342,12 @@ impl KeyboardTest {
                                 ui.label(egui::RichText::new(format!("{} ×{n}", pretty(*key))).size(12.5).color(theme::INK));
                             });
                     }
-                    ui.label(egui::RichText::new("Press it a few more times to confirm; cleaning or replacing the switch usually fixes it.").size(12.0).color(theme::TEXT_DIM));
+                    ui.label(egui::RichText::new(t("Press it a few more times to confirm; cleaning or replacing the switch usually fixes it.")).size(12.0).color(theme::TEXT_DIM));
                 });
                 ui.add_space(2.0);
             }
             ui.label(
-                egui::RichText::new("Tip: Win, PrtSc and some F-keys may be grabbed by your desktop before the app sees them.")
+                egui::RichText::new(t("Tip: Win, PrtSc and some F-keys may be grabbed by your desktop before the app sees them."))
                     .size(12.0)
                     .color(theme::TEXT_DIM),
             );

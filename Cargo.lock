@@ -2325,6 +2325,7 @@ dependencies = [
  "image",
  "nokhwa",
  "serde",
+ "sys-locale",
  "v4l",
  "winresource",
 ]
