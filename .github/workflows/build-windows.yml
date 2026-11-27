@@ -129,7 +129,7 @@ jobs:
           rustup default stable
 
       - name: Install ALSA (sound) and udev (gamepads) development headers
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev libclang-dev linux-libc-dev pkg-config
 
       - name: Cache Cargo downloads and build output
         uses: actions/cache@v4

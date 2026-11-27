@@ -9,8 +9,14 @@ cpal = "0.18.2"
 dirs = "7.0.0"
 eframe = { version = "0.37.0", features = ["glow", "persistence"] }
 gilrs = "0.11.2"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde = { version = "1.0.229", features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+v4l = "0.14"
+
+[target.'cfg(windows)'.dependencies]
+nokhwa = { version = "0.10.11", default-features = false, features = ["input-msmf"] }
 
 [patch.crates-io]
 egui-winit = { path = "vendor/egui-winit" }

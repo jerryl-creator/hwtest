@@ -1,5 +1,6 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")] // no console window on Windows
 
+mod camera;
 mod chatter;
 mod gamepad;
 mod keyboard;
@@ -25,6 +26,7 @@ enum Tab {
     Gamepad,
     Display,
     Audio,
+    Camera,
     Report,
 }
 
@@ -34,6 +36,7 @@ const TABS: &[(Tab, &str, &str, &str)] = &[
     (Tab::Gamepad, "🎮", "Gamepad", "ゲームパッド"),
     (Tab::Display, "★", "Display", "ディスプレイ"),
     (Tab::Audio, "🔊", "Audio", "オーディオ"),
+    (Tab::Camera, "📷", "Camera", "カメラ"),
     (Tab::Report, "📋", "Report", "レポート"),
 ];
 
@@ -48,6 +51,7 @@ struct App {
     mic: mic::MicTest,
     mouse: mouse::MouseTest,
     gamepad: gamepad::GamepadTest,
+    camera: camera::CameraTest,
     report: report::ReportTab,
 }
 
@@ -69,6 +73,7 @@ impl App {
             mic: mic::MicTest::default(),
             mouse: mouse::MouseTest::default(),
             gamepad: gamepad::GamepadTest::default(),
+            camera: camera::CameraTest::default(),
             report: report::ReportTab::default(),
         };
         // Restore remembered settings (skipped for dev screenshots so they're reproducible).
@@ -259,6 +264,10 @@ impl eframe::App for App {
             // Privacy: the microphone is only ever open while the Audio tab is showing.
             self.mic.stop();
         }
+        if self.tab != Tab::Camera {
+            // Privacy: the camera is only ever on while the Camera tab is showing.
+            self.camera.stop();
+        }
 
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(egui::Margin { left: 18, right: 18, top: 6, bottom: 18 }))
@@ -274,6 +283,7 @@ impl eframe::App for App {
                     Tab::Mouse => self.mouse.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Gamepad => self.gamepad.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Display => self.pixels.ui(ui, &mut self.mascot, self.cjk),
+                    Tab::Camera => self.camera.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Report => {
                         let sections = [
                             self.keyboard.report(),
@@ -282,6 +292,7 @@ impl eframe::App for App {
                             self.pixels.report(),
                             self.speakers.report(),
                             self.mic.report(),
+                            self.camera.report(),
                         ];
                         let header = report::Header { renderer: RENDERER_INFO.get().cloned().unwrap_or_else(|| "unknown".into()) };
                         self.report.ui(ui, &mut self.mascot, self.cjk, &header, &sections);
