@@ -5,7 +5,10 @@ use eframe::egui::{self, Align2, Color32, PointerButton, Pos2, Rect, Sense, Stro
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Two presses of the same button closer than this are a faulty switch, not a person.
-const CLICK_CHATTER_SECS: f64 = 0.04;
+/// Nobody clicking slowly gets near it, so there are no false alarms.
+const CLICK_CHATTER_SECS: f64 = 0.05;
+/// How many recent gaps between clicks to show per button.
+const GAPS_SHOWN: usize = 6;
 /// Presses of the same button closer than this form a streak (double, triple…). Windows' default double-click time.
 const STREAK_SECS: f64 = 0.5;
 /// How long the pointer trail stays visible.
@@ -42,6 +45,10 @@ pub struct MouseTest {
     last_press: [Option<f64>; 5],
     /// Click chatter per button in `BUTTONS`: how many times one click registered as two.
     pub chatter: [u32; 5],
+    /// Recent gaps (seconds) between presses of each button, newest last.
+    gaps: [VecDeque<f64>; 5],
+    /// Shortest gap ever seen per button.
+    min_gap: [Option<f64>; 5],
     /// Real clicks per button (chatter not included).
     pub clicks: [u32; 5],
     /// Current run of quick clicks per button, and when its last click happened.
@@ -95,6 +102,14 @@ impl MouseTest {
     /// Count one press of `BUTTONS[i]`. Only the same button pressed again quickly
     /// continues a streak, so Right then Left is never a double-click.
     fn press(&mut self, i: usize, now: f64) {
+        if let Some(prev) = self.last_press[i] {
+            let gap = now - prev;
+            self.gaps[i].push_back(gap);
+            if self.gaps[i].len() > GAPS_SHOWN {
+                self.gaps[i].pop_front();
+            }
+            self.min_gap[i] = Some(self.min_gap[i].map_or(gap, |m| m.min(gap)));
+        }
         if self.last_press[i].replace(now).is_some_and(|prev| now - prev < CLICK_CHATTER_SECS) {
             self.chatter[i] += 1;
             return;
@@ -142,6 +157,10 @@ impl MouseTest {
         if !counts.is_empty() {
             lines.push(format!("Clicks: {}", counts.join(", ")));
         }
+        let shortest: Vec<String> = (0..5).filter_map(|i| self.min_gap[i].map(|g| format!("{} {}", BUTTONS[i].1, fmt_gap(g)))).collect();
+        if !shortest.is_empty() {
+            lines.push(format!("Shortest gap between clicks: {} (under 50 ms = faulty switch)", shortest.join(", ")));
+        }
         lines.push(format!("Double-click: {}", if self.double_clicked { "works" } else { "not tested" }));
         if !chatter.is_empty() {
             lines.push(format!("Click chatter (one click counted twice): {}", chatter.join(", ")));
@@ -179,13 +198,14 @@ impl MouseTest {
                 });
             });
             ui.label(
-                egui::RichText::new("Click each button, scroll in every direction, double-click, and move around the drawing area.")
+                egui::RichText::new("Click each button slowly, about once a second: a healthy switch never shows a gap under 50 ms. Then scroll every way, double-click and draw.")
                     .color(theme::TEXT_DIM),
             );
             ui.add_space(8.0);
 
             // Fill the window: the card's other rows need about 190 px (+30 with the chatter line).
-            let reserved = if self.chatter.iter().any(|c| *c > 0) { 222.0 } else { 190.0 };
+            let gap_rows = self.gaps.iter().filter(|g| !g.is_empty()).count() as f32;
+            let reserved = 190.0 + gap_rows * 40.0 + if self.chatter.iter().any(|c| *c > 0) { 32.0 } else { 0.0 };
             let h = (self.fit_height - reserved).clamp(300.0, 700.0);
             ui.horizontal_top(|ui| {
                 // Mouse diagram
@@ -260,6 +280,31 @@ impl MouseTest {
                 ui.add_space(8.0);
                 chip(ui, "Double-click", self.double_clicked);
             });
+            // Gap readout: one row per button that has been clicked twice or more.
+            for i in 0..5 {
+                if self.gaps[i].is_empty() {
+                    continue;
+                }
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.add_sized(
+                        Vec2::new(70.0, 20.0),
+                        egui::Label::new(egui::RichText::new(BUTTONS[i].1).font(theme::bold(13.0)).color(theme::TEXT)),
+                    );
+                    ui.label(egui::RichText::new("gaps").size(12.0).color(theme::TEXT_DIM));
+                    for &g in &self.gaps[i] {
+                        let bad = g < CLICK_CHATTER_SECS;
+                        egui::Frame::new()
+                            .fill(if bad { theme::GLINT } else { alpha(theme::SILVER, 0.12) })
+                            .corner_radius(8)
+                            .inner_margin(egui::Margin::symmetric(7, 1))
+                            .show(ui, |ui| {
+                                let t = if bad { format!("⚠ {}", fmt_gap(g)) } else { fmt_gap(g) };
+                                ui.label(egui::RichText::new(t).size(12.5).color(if bad { theme::INK } else { theme::TEXT }));
+                            });
+                    }
+                });
+            }
             if worst.is_some() {
                 ui.add_space(4.0);
                 let list: Vec<String> = (0..5)
@@ -335,6 +380,20 @@ impl MouseTest {
     }
 }
 
+/// A gap between clicks, rounded honestly: input arrives once per frame (~16 ms).
+fn fmt_gap(secs: f64) -> String {
+    let ms = secs * 1000.0;
+    if ms < 16.0 {
+        "<16 ms".into()
+    } else if ms < 1000.0 {
+        format!("~{} ms", ms.round() as u32)
+    } else if ms < 10_000.0 {
+        format!("{:.1} s", secs)
+    } else {
+        ">10 s".into()
+    }
+}
+
 fn chip(ui: &mut egui::Ui, label: &str, ok: bool) {
     egui::Frame::new()
         .fill(if ok { Color32::WHITE } else { alpha(theme::SILVER, 0.15) })
@@ -376,6 +435,20 @@ mod tests {
         assert!(m.double_clicked);
         m.press(0, 1.4);
         assert_eq!(m.streak[0], 3);
+    }
+
+    #[test]
+    fn gaps_are_recorded_and_rounded() {
+        let mut m = MouseTest::default();
+        m.press(0, 1.0);
+        m.press(0, 1.8);
+        m.press(0, 1.845); // 45 ms: chatter with the 50 ms threshold
+        assert_eq!(m.chatter[0], 1);
+        assert_eq!(m.gaps[0].len(), 2);
+        assert_eq!(fmt_gap(m.min_gap[0].unwrap()), "~45 ms");
+        assert_eq!(fmt_gap(0.0), "<16 ms");
+        assert_eq!(fmt_gap(0.812), "~812 ms");
+        assert_eq!(fmt_gap(2.0), "2.0 s");
     }
 
     #[test]
