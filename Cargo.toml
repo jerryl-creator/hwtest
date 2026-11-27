@@ -22,6 +22,7 @@ nokhwa = { version = "0.10.11", default-features = false, features = ["input-msm
 
 [patch.crates-io]
 egui-winit = { path = "vendor/egui-winit" }
+nokhwa-bindings-windows = { path = "vendor/nokhwa-bindings-windows" }
 
 [profile.release]
 opt-level = 3

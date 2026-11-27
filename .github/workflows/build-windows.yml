@@ -142,7 +142,9 @@ jobs:
           restore-keys: linux-${{ matrix.arch }}-
 
       - name: Run tests
-        run: cargo test --locked
+        run: |
+          cargo test --locked
+          cargo test --manifest-path vendor/nokhwa-bindings-windows/Cargo.toml
 
       - name: Build and package
         run: ./package-linux.sh
