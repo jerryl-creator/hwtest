@@ -282,6 +282,11 @@ impl GamepadTest {
         }
     }
 
+    /// A controller is plugged in right now.
+    pub fn connected(&self) -> bool {
+        self.gilrs.as_ref().is_some_and(|g| g.gamepads().next().is_some())
+    }
+
     pub fn left_ok(&self) -> bool {
         self.left.max_reach > 0.9
     }

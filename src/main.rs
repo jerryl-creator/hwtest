@@ -10,6 +10,7 @@ mod layouts;
 mod mic;
 mod mouse;
 mod pixels;
+mod quick;
 mod report;
 mod settings;
 mod sfx;
@@ -55,6 +56,8 @@ struct App {
     gamepad: gamepad::GamepadTest,
     camera: camera::CameraTest,
     report: report::ReportTab,
+    /// The guided quick check, while it's running.
+    quick: Option<quick::QuickCheck>,
     /// The language the user picked (None = follow the system).
     lang_choice: Option<i18n::Lang>,
 }
@@ -93,7 +96,15 @@ impl App {
             camera: camera::CameraTest::default(),
             report: report::ReportTab::default(),
             lang_choice: saved.lang,
+            quick: None,
         };
+        // Dev: NYANSPECT_QUICK=<step 0-6> starts the quick check at that step.
+        if let Some(step) = std::env::var("NYANSPECT_QUICK").ok().and_then(|v| v.parse::<usize>().ok()) {
+            let mut q = quick::QuickCheck::new();
+            q.current = step.min(quick::STEPS.len() - 1);
+            app.tab = tab_for(q.step());
+            app.quick = Some(q);
+        }
         app.keyboard.load_settings(&saved);
         app.pixels.load_settings(&saved);
         app.speakers.load_settings(&saved);
@@ -126,9 +137,36 @@ impl App {
                 self.mascot.ui(ui);
                 ui.add_space(4.0);
                 self.language_button(ui);
+                if self.quick.is_none() {
+                    ui.add_space(6.0);
+                    // Full label when there's room before the tabs, else just "▶" (the tooltip still names it).
+                    let full = i18n::t("▶ Quick check");
+                    let need = ui.painter().layout_no_wrap(full.to_string(), theme::bold(15.0), Color32::WHITE).size().x + 30.0 + 16.0;
+                    let label = if ui.available_width() >= need { full } else { "▶" };
+                    let tip = format!("{}\n{}", full, i18n::t("A guided tour through every test, one step at a time, ending with your report"));
+                    let b = theme::fancy_button(ui, label, Vec2::new(40.0, 32.0), theme::ACCENT, theme::SILVER, true).on_hover_text(tip);
+                    if b.clicked() {
+                        self.quick = Some(quick::QuickCheck::new());
+                        self.report.quick_done = None;
+                        self.tab = Tab::Keyboard;
+                    }
+                }
             });
         });
         ui.add_space(8.0);
+    }
+
+    /// A quick-check step's live result: the same status the report shows.
+    fn step_status(&self, step: quick::Step) -> report::Status {
+        match step {
+            quick::Step::Keyboard => self.keyboard.report().status,
+            quick::Step::Mouse => self.mouse.report().status,
+            quick::Step::Display => self.pixels.report().status,
+            quick::Step::Speakers => self.speakers.report().status,
+            quick::Step::Microphone => self.mic.report().status,
+            quick::Step::Camera => self.camera.report().status,
+            quick::Step::Gamepad => self.gamepad.report().status,
+        }
     }
 
     /// "🌐 EN" pill that opens a menu of languages.
@@ -333,6 +371,33 @@ impl eframe::App for App {
             self.camera.stop();
         }
 
+        // Quick check guide bar along the bottom.
+        if self.quick.is_some() {
+            let step = self.quick.as_ref().map_or(quick::Step::Keyboard, |q| q.step());
+            let status = self.step_status(step);
+            let available = step != quick::Step::Gamepad || self.gamepad.connected();
+            let on_tab = self.tab == tab_for(step);
+            let mut action = quick::Action::None;
+            egui::Panel::bottom("quick")
+                .frame(egui::Frame::new().inner_margin(egui::Margin { left: 18, right: 18, top: 4, bottom: 14 }))
+                .show(ui, |ui| {
+                    if let Some(q) = self.quick.as_mut() {
+                        action = q.ui(ui, status, on_tab, available);
+                    }
+                });
+            match action {
+                quick::Action::None => {}
+                quick::Action::Goto(s) => self.tab = tab_for(s),
+                quick::Action::Finish => {
+                    let skipped = self.quick.take().map(|q| q.skipped()).unwrap_or_default();
+                    self.report.quick_done = Some(skipped.iter().map(|s| s.name()).collect());
+                    self.tab = Tab::Report;
+                    self.mascot.cheer();
+                }
+                quick::Action::Exit => self.quick = None,
+            }
+        }
+
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(egui::Margin { left: 18, right: 18, top: 6, bottom: 18 }))
             .show(ui, |ui| {
@@ -372,6 +437,18 @@ impl eframe::App for App {
             self.speakers.play_sfx(sound);
         }
         pace_frames(ctx);
+    }
+}
+
+/// The tab where a quick-check step happens.
+fn tab_for(step: quick::Step) -> Tab {
+    match step {
+        quick::Step::Keyboard => Tab::Keyboard,
+        quick::Step::Mouse => Tab::Mouse,
+        quick::Step::Display => Tab::Display,
+        quick::Step::Speakers | quick::Step::Microphone => Tab::Audio,
+        quick::Step::Camera => Tab::Camera,
+        quick::Step::Gamepad => Tab::Gamepad,
     }
 }
 

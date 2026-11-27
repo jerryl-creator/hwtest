@@ -582,7 +582,7 @@ impl Mascot {
         let font = FontId::proportional(13.0);
         let full_w = ui.painter().layout_no_wrap(self.msg.clone(), font.clone(), Color32::WHITE).size().x;
         let avail = ui.available_width();
-        let bubble_w = (full_w + 28.0).min(avail - 76.0).min(360.0);
+        let bubble_w = (full_w + 28.0).min(avail - 76.0).min(440.0);
         let wrap = bubble_w - 28.0;
         let full_h = ui.painter().layout(self.msg.clone(), font.clone(), Color32::WHITE, wrap).size().y;
         let show_bubble = bubble_w > 120.0;

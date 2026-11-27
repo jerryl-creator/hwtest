@@ -1,7 +1,7 @@
 //! Translations: one row per English string, columns [English, 简体中文, Bahasa Melayu, 日本語].
 //! `{0}`, `{1}`… are values filled in at run time and may be reordered.
 
-pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT];
+pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK];
 
 const MAIN: &[[&str; 4]] = &[
     ["Keyboard", "键盘", "Papan Kekunci", "キーボード"],
@@ -372,4 +372,30 @@ const REPORT: &[[&str; 4]] = &[
 
 const MIC_HINT: &[[&str; 4]] = &[
     ["If the meter doesn't move: check the app has microphone access (Windows: Settings → Privacy & security → Microphone) and that the right input device is selected in your sound settings. Recordings are never saved.", "如果音量条不动：请检查应用是否有麦克风权限（Windows：设置 → 隐私和安全性 → 麦克风），以及声音设置中是否选择了正确的输入设备。录音永远不会被保存。", "Jika meter tidak bergerak: pastikan aplikasi mempunyai akses mikrofon (Windows: Settings → Privacy & security → Microphone) dan peranti input yang betul dipilih dalam tetapan bunyi anda. Rakaman tidak pernah disimpan.", "メーターが動かない場合: アプリにマイクへのアクセス許可があるか（Windows: 設定 → プライバシーとセキュリティ → マイク）、サウンド設定で正しい入力デバイスが選ばれているか確認してください。録音は保存されません。"],
+];
+
+const QUICK: &[[&str; 4]] = &[
+    ["Quick check · step {0} of {1}", "快速检测 · 第 {0} / {1} 步", "Semakan pantas · langkah {0} daripada {1}", "クイックチェック · ステップ {0} / {1}"],
+    ["Press every key once: each one lights up when it works. Press Next when you're done.", "每个键按一次：正常的键会亮起。完成后点“下一步”。", "Tekan setiap kekunci sekali: setiap satu menyala jika berfungsi. Tekan Seterusnya apabila selesai.", "全部のキーを1回ずつ押してください。正常なキーは光ります。終わったら「次へ」を押してね。"],
+    ["Click each mouse button, scroll up and down, and double-click in the box.", "点击每个鼠标按键，上下滚动，并在框里双击。", "Klik setiap butang tetikus, tatal ke atas dan ke bawah, dan dwiklik di dalam kotak.", "マウスの各ボタンをクリックし、上下にスクロールして、枠の中でダブルクリックしてね。"],
+    ["Press “Start fullscreen test”, look for odd dots on every colour, then press Esc.", "点击“开始全屏测试”，在每种颜色上查找异常的点，然后按 Esc。", "Tekan “Mula ujian skrin penuh”, cari titik pelik pada setiap warna, kemudian tekan Esc.", "「フルスクリーンテスト開始」を押して、各色で変な点がないか探し、Escを押してね。"],
+    ["Click each speaker circle and answer Yes or No under it.", "点击每个扬声器圆圈，并在下方回答“是”或“否”。", "Klik setiap bulatan pembesar suara dan jawab Ya atau Tidak di bawahnya.", "各スピーカーの丸をクリックして、下の「はい」か「いいえ」で答えてね。"],
+    ["Press Start mic and talk, then Record 3 s & play back and say whether it sounded clear.", "点击“打开麦克风”并说话，然后点“录 3 秒并回放”，再回答听起来是否清晰。", "Tekan Mula mikrofon dan bercakap, kemudian Rakam 3 s & main semula dan nyatakan sama ada ia jelas.", "「マイク開始」を押して話し、「3秒録音して再生」を押して、クリアに聞こえたか答えてね。"],
+    ["Press Start camera and check that the picture looks right.", "点击“打开摄像头”，确认画面正常。", "Tekan Mula kamera dan pastikan gambar kelihatan betul.", "「カメラ開始」を押して、映像が正しく見えるか確認してね。"],
+    ["Press every button and roll both sticks all the way around.", "按下每个按键，并把两个摇杆都转满一圈。", "Tekan setiap butang dan putar kedua-dua kayu bedik sepenuhnya.", "全部のボタンを押して、両スティックを端までぐるっと回してね。"],
+    ["No controller is connected, so this step will be skipped. Plug one in to test it.", "未连接手柄，此步骤将被跳过。插上手柄即可测试。", "Tiada pengawal disambung, jadi langkah ini akan dilangkau. Pasang satu untuk mengujinya.", "コントローラーが接続されていないので、このステップはスキップします。テストするには接続してください。"],
+    ["Finish ✔", "完成 ✔", "Selesai ✔", "完了 ✔"],
+    ["Next ▶", "下一步 ▶", "Seterusnya ▶", "次へ ▶"],
+    ["Skip", "跳过", "Langkau", "スキップ"],
+    ["◀ Back", "◀ 上一步", "◀ Kembali", "◀ 戻る"],
+    ["Show this step", "显示此步骤", "Tunjuk langkah ini", "このステップを表示"],
+    ["✕ Exit", "✕ 退出", "✕ Keluar", "✕ 終了"],
+    ["Stop the quick check (your results are kept)", "停止快速检测（结果会保留）", "Hentikan semakan pantas (keputusan anda disimpan)", "クイックチェックを終了（結果は残ります）"],
+    ["Will be skipped", "将被跳过", "Akan dilangkau", "スキップ予定"],
+    ["✔ Looks good", "✔ 正常", "✔ Nampak baik", "✔ 良好"],
+    ["Not started", "未开始", "Belum mula", "未開始"],
+    ["▶ Quick check", "▶ 快速检测", "▶ Semakan pantas", "▶ クイックチェック"],
+    ["A guided tour through every test, one step at a time, ending with your report", "一步一步带你完成所有测试，最后生成报告", "Panduan melalui setiap ujian, satu langkah demi satu, berakhir dengan laporan anda", "すべてのテストを1ステップずつ案内し、最後にレポートを表示します"],
+    ["✔ Quick check finished: every step was checked.", "✔ 快速检测完成：所有步骤都已检查。", "✔ Semakan pantas selesai: setiap langkah telah diperiksa.", "✔ クイックチェック完了: すべてのステップを確認しました。"],
+    ["✔ Quick check finished. Skipped: {0}", "✔ 快速检测完成。已跳过：{0}", "✔ Semakan pantas selesai. Dilangkau: {0}", "✔ クイックチェック完了。スキップ: {0}"],
 ];

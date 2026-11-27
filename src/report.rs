@@ -102,6 +102,8 @@ fn save_dir() -> PathBuf {
 pub struct ReportTab {
     /// Feedback after copy/save, and when it happened.
     message: Option<(String, f64)>,
+    /// Set when a quick check finishes: the steps that were skipped (English names).
+    pub quick_done: Option<Vec<&'static str>>,
 }
 
 impl ReportTab {
@@ -163,6 +165,14 @@ impl ReportTab {
                 ))
                 .color(theme::TEXT_DIM),
             );
+            if let Some(skipped) = &self.quick_done {
+                let text = if skipped.is_empty() {
+                    t("✔ Quick check finished: every step was checked.").to_string()
+                } else {
+                    tr!("✔ Quick check finished. Skipped: {0}", skipped.iter().map(|s| t(s)).collect::<Vec<_>>().join(", "))
+                };
+                ui.label(egui::RichText::new(text).font(theme::bold(13.5)).color(Color32::WHITE));
+            }
             if let Some((msg, at)) = &self.message {
                 if now - at < 6.0 {
                     ui.label(egui::RichText::new(msg).font(theme::bold(13.0)).color(Color32::WHITE));
