@@ -110,7 +110,7 @@ pub fn label(style: Style, b: Button) -> &'static str {
         (B::RightTrigger2, Style::Nintendo) => "ZR",
         (B::Select, Style::Nintendo) => "−",
         (B::Start, Style::Nintendo) => "+",
-        (B::Mode, Style::Nintendo) => "Home",
+        (B::Mode, Style::Nintendo) => "HOME",
         (B::South, _) => "Cross",
         (B::East, _) => "Circle",
         (B::West, _) => "Square",

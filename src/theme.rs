@@ -320,6 +320,41 @@ pub fn fancy_button(ui: &mut Ui, label: &str, size: Vec2, c1: Color32, c2: Color
     }
 }
 
+/// An on/off switch with a bold label and a dim hint underneath. Never takes keyboard focus.
+/// Returns true when it was flipped.
+pub fn toggle(ui: &mut Ui, on: &mut bool, label: &str, hint: &str) -> bool {
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        let (r, resp) = ui.allocate_exact_size(Vec2::new(46.0, 26.0), Sense::CLICK);
+        let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+        if resp.clicked() {
+            *on = !*on;
+            changed = true;
+        }
+        let k = ui.ctx().animate_bool_with_time(resp.id.with("on"), *on, 0.15);
+        let p = ui.painter();
+        if k > 0.01 {
+            hgradient(p, r, 13.0, alpha(ACCENT, k), alpha(SILVER, k));
+        }
+        p.rect_filled(r, 13.0, Color32::from_rgba_unmultiplied(40, 40, 44, (220.0 * (1.0 - k)) as u8));
+        p.rect_stroke(r, 13.0, Stroke::new(1.0, alpha(LIGHT, 0.25)), StrokeKind::Inside);
+        let knob = Pos2::new(lerp(r.left() + 13.0, r.right() - 13.0, k), r.center().y);
+        p.circle_filled(knob, 10.0, lerp_color(LIGHT, INK, k));
+        ui.add_space(6.0);
+        ui.vertical(|ui| {
+            ui.label(egui::RichText::new(label).font(bold(14.5)).color(Color32::WHITE));
+            if !hint.is_empty() {
+                ui.label(egui::RichText::new(hint).size(12.5).color(TEXT_DIM));
+            }
+        });
+    });
+    changed
+}
+
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
 /// Segmented pill buttons for picking one option. Never takes keyboard focus (so key tests
 /// can't trigger it). Returns true when the selection changed.
 pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, id: &str, options: &[(T, &str, &str)], value: &mut T) -> bool {

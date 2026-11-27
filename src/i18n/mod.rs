@@ -191,6 +191,27 @@ mod tests {
 
     /// String literals passed to `t(` or `tr!(` (simple escapes only).
     fn ui_strings(src: &str) -> Vec<String> {
+        // `t(\n    "…")` counts too: drop whitespace between "(" and a string.
+        let mut flat = String::with_capacity(src.len());
+        let mut chars = src.chars().peekable();
+        while let Some(c) = chars.next() {
+            flat.push(c);
+            if c == '(' {
+                let mut ws = String::new();
+                while let Some(&n) = chars.peek() {
+                    if n.is_whitespace() {
+                        ws.push(n);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if chars.peek() != Some(&'"') {
+                    flat.push_str(&ws);
+                }
+            }
+        }
+        let src = flat.as_str();
         let mut out = Vec::new();
         for marker in ["t(\"", "tr!(\"", "card_title(ui, \"", "title: \""] {
             let mut rest = src;

@@ -36,7 +36,7 @@ pub struct KeyboardTest {
     pending: Vec<(Key, bool)>,
     rng: u32,
     celebrated: bool,
-    sfx: Sfx,
+    pub sfx: Sfx,
     /// Most keys held down at the same time (rollover).
     max_held: usize,
     /// Height the page may fill (set by the app each frame), so the keyboard scales to fit.

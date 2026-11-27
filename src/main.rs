@@ -13,17 +13,19 @@ mod pixels;
 mod quick;
 mod report;
 mod settings;
+mod shell;
 mod sfx;
 mod sfx_audio;
 mod speakers;
 mod theme;
 
-use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Vec2};
+use eframe::egui::{self, Align2, Color32, Sense, Vec2};
 use eframe::{egui_wgpu, wgpu};
 use theme::alpha;
 
 #[derive(PartialEq, Clone, Copy)]
 enum Tab {
+    Home,
     Keyboard,
     Mouse,
     Gamepad,
@@ -31,9 +33,12 @@ enum Tab {
     Audio,
     Camera,
     Report,
+    Settings,
 }
 
+/// Pages: (page, icon, English name, Japanese name). Settings sits at the bottom of the sidebar.
 const TABS: &[(Tab, &str, &str, &str)] = &[
+    (Tab::Home, "⌂", "Home", "ホーム"),
     (Tab::Keyboard, "⌨", "Keyboard", "キーボード"),
     (Tab::Mouse, "🖱", "Mouse", "マウス"),
     (Tab::Gamepad, "🎮", "Gamepad", "ゲームパッド"),
@@ -41,6 +46,7 @@ const TABS: &[(Tab, &str, &str, &str)] = &[
     (Tab::Audio, "🔊", "Audio", "オーディオ"),
     (Tab::Camera, "📷", "Camera", "カメラ"),
     (Tab::Report, "📋", "Report", "レポート"),
+    (Tab::Settings, "⚙", "Settings", "設定"),
 ];
 
 struct App {
@@ -58,6 +64,10 @@ struct App {
     report: report::ReportTab,
     /// The guided quick check, while it's running.
     quick: Option<quick::QuickCheck>,
+    /// Settings page options.
+    reduce_motion: bool,
+    show_mascot: bool,
+    ui_scale: f32,
     /// The language the user picked (None = follow the system).
     lang_choice: Option<i18n::Lang>,
 }
@@ -83,7 +93,7 @@ impl App {
             cc.egui_ctx.set_theme(egui::Theme::Light);
         }
         let mut app = Self {
-            tab: Tab::Keyboard,
+            tab: Tab::Home,
             cjk,
             bg: theme::Background::new(),
             mascot: theme::Mascot::new(),
@@ -97,7 +107,16 @@ impl App {
             report: report::ReportTab::default(),
             lang_choice: saved.lang,
             quick: None,
+            reduce_motion: saved.reduce_motion,
+            show_mascot: saved.show_mascot,
+            ui_scale: saved.ui_scale,
         };
+        app.bg.enabled = !app.reduce_motion;
+        if (app.ui_scale - 1.0).abs() > 0.01 {
+            cc.egui_ctx.set_zoom_factor(app.ui_scale);
+        }
+        // Ctrl +/- would zoom the app while someone is testing those keys.
+        cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         // Dev: NYANSPECT_QUICK=<step 0-6> starts the quick check at that step.
         if let Some(step) = std::env::var("NYANSPECT_QUICK").ok().and_then(|v| v.parse::<usize>().ok()) {
             let mut q = quick::QuickCheck::new();
@@ -110,50 +129,6 @@ impl App {
         app.speakers.load_settings(&saved);
         app.keyboard.apply_env_layout();
         app
-    }
-
-    fn header(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            ui.add_space(6.0);
-            // Logo with glow
-            let (r, logo) = ui.allocate_exact_size(Vec2::new(170.0, 44.0), Sense::hover());
-            if let Some(info) = RENDERER_INFO.get() {
-                logo.on_hover_text(tr!("Renderer: {0}", info));
-            }
-            let p = ui.painter();
-            let t = ui.input(|i| i.time as f32);
-            theme::glow(p, r.left_center() + Vec2::new(60.0, 0.0), 70.0, alpha(theme::ACCENT, 0.12 + 0.04 * (t * 2.0).sin()));
-            let title = p.text(r.left_center() + Vec2::new(0.0, -6.0), Align2::LEFT_CENTER, "Nyanspect", theme::bold(26.0), Color32::WHITE);
-            let sub = if self.cjk { "にゃんスペクト" } else { i18n::t("hardware inspector") };
-            p.text(r.left_center() + Vec2::new(2.0, 15.0), Align2::LEFT_CENTER, sub, egui::FontId::proportional(11.0), theme::LIGHT);
-            theme::star(p, Pos2::new(title.right() + 6.0, r.top() + 6.0 + (t * 3.0).sin() * 2.0), 6.0, theme::GLINT);
-
-            ui.add_space(18.0);
-            self.tab_bar(ui);
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_space(6.0);
-                self.mascot.ui(ui);
-                ui.add_space(4.0);
-                self.language_button(ui);
-                if self.quick.is_none() {
-                    ui.add_space(6.0);
-                    // Full label when there's room before the tabs, else just "▶" (the tooltip still names it).
-                    let full = i18n::t("▶ Quick check");
-                    let need = ui.painter().layout_no_wrap(full.to_string(), theme::bold(15.0), Color32::WHITE).size().x + 30.0 + 16.0;
-                    let label = if ui.available_width() >= need { full } else { "▶" };
-                    let tip = format!("{}\n{}", full, i18n::t("A guided tour through every test, one step at a time, ending with your report"));
-                    let b = theme::fancy_button(ui, label, Vec2::new(40.0, 32.0), theme::ACCENT, theme::SILVER, true).on_hover_text(tip);
-                    if b.clicked() {
-                        self.quick = Some(quick::QuickCheck::new());
-                        self.report.quick_done = None;
-                        self.tab = Tab::Keyboard;
-                    }
-                }
-            });
-        });
-        ui.add_space(8.0);
     }
 
     /// A quick-check step's live result: the same status the report shows.
@@ -170,9 +145,9 @@ impl App {
     }
 
     /// "🌐 EN" pill that opens a menu of languages.
-    fn language_button(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn language_button(&mut self, ui: &mut egui::Ui, compact: bool) {
         let cur = i18n::lang();
-        let label = format!("🌐 {}", cur.short());
+        let label = if compact { "🌐".to_string() } else { format!("🌐 {}", cur.short()) };
         let font = theme::bold(13.0);
         let w = ui.painter().layout_no_wrap(label.clone(), font.clone(), Color32::WHITE).size().x + 26.0;
         let (r, resp) = ui.allocate_exact_size(Vec2::new(w, 32.0), Sense::CLICK);
@@ -199,56 +174,6 @@ impl App {
         self.cjk = theme::apply_fonts(ctx, lang);
     }
 
-    fn tab_bar(&mut self, ui: &mut egui::Ui) {
-        // Tabs share the space: wide with few tabs, narrower as more are added.
-        let base_w: f32 = match TABS.len() {
-            0..=3 => 138.0,
-            4..=5 => 112.0,
-            _ => 100.0,
-        };
-        let font = if TABS.len() <= 3 { 14.5 } else { 13.5 };
-        // Translated names can be longer: widen the tabs to fit (within reason); any label
-        // still too long is drawn smaller below.
-        let label = |icon: &str, name: &str| format!("{icon} {}", i18n::t(name));
-        let widest = TABS
-            .iter()
-            .map(|(_, icon, name, _)| ui.painter().layout_no_wrap(label(icon, name), theme::bold(font), Color32::WHITE).size().x)
-            .fold(0.0, f32::max);
-        let tab_w = (widest + 18.0).clamp(base_w, 124.0);
-        let (bar, _) = ui.allocate_exact_size(Vec2::new(tab_w * TABS.len() as f32 + 12.0, 50.0), Sense::hover());
-        let p = ui.painter().clone();
-        p.rect_filled(bar, 25.0, Color32::from_rgba_unmultiplied(10, 10, 12, 200));
-        p.rect_stroke(bar, 25.0, egui::Stroke::new(1.0, alpha(theme::LIGHT, 0.15)), egui::StrokeKind::Inside);
-
-        let idx = TABS.iter().position(|t| t.0 == self.tab).unwrap_or(0) as f32;
-        let x = ui.ctx().animate_value_with_time(egui::Id::unique("tab-slide"), idx, 0.28);
-        let pill = Rect::from_min_size(bar.min + Vec2::new(6.0 + x * tab_w, 5.0), Vec2::new(tab_w, 40.0));
-        theme::rect_glow(&p, pill, 20.0, theme::ACCENT, 0.45);
-        theme::hgradient(&p, pill, 20.0, theme::ACCENT, theme::SILVER);
-
-        for (i, (tab, icon, name, jp)) in TABS.iter().enumerate() {
-            let r = Rect::from_min_size(bar.min + Vec2::new(6.0 + i as f32 * tab_w, 5.0), Vec2::new(tab_w, 40.0));
-            let resp = ui.interact(r, egui::Id::unique(("tab", i)), Sense::CLICK).on_hover_cursor(egui::CursorIcon::PointingHand);
-            if resp.clicked() {
-                self.tab = *tab;
-            }
-            let sel = self.tab == *tab;
-            let hover = ui.ctx().animate_bool_with_time(resp.id, resp.hovered() && !sel, 0.15);
-            if hover > 0.0 {
-                p.rect_filled(r, 20.0, alpha(Color32::WHITE, 0.06 * hover));
-            }
-            let col = if sel { theme::INK } else { theme::lerp_color(theme::TEXT_DIM, theme::TEXT, hover) };
-            let dy = if self.cjk { -6.0 } else { 0.0 };
-            let text = label(icon, name);
-            let w = ui.painter().layout_no_wrap(text.clone(), theme::bold(font), Color32::WHITE).size().x;
-            let size = if w > tab_w - 10.0 { font * (tab_w - 10.0) / w } else { font };
-            p.text(r.center() + Vec2::new(0.0, dy), Align2::CENTER_CENTER, text, theme::bold(size), col);
-            if self.cjk {
-                let sub = i18n::subtitle(name, jp);
-                p.text(r.center() + Vec2::new(0.0, 11.0), Align2::CENTER_CENTER, sub, egui::FontId::proportional(10.0), alpha(col, 0.75));
-            }
-        }
-    }
 }
 
 impl eframe::App for App {
@@ -338,6 +263,9 @@ impl eframe::App for App {
         self.pixels.store_settings(&mut s);
         self.speakers.store_settings(&mut s);
         s.lang = self.lang_choice;
+        s.reduce_motion = self.reduce_motion;
+        s.show_mascot = self.show_mascot;
+        s.ui_scale = self.ui_scale;
         eframe::set_value(storage, settings::KEY, &s);
     }
 
@@ -358,7 +286,19 @@ impl eframe::App for App {
         }
         self.bg.paint(ctx);
 
-        egui::Panel::top("tabs").show(ui, |ui| self.header(ui));
+        let compact = shell::is_compact(ctx);
+        egui::Panel::left("nav")
+            .exact_size(if compact { 76.0 } else { 236.0 })
+            .resizable(false)
+            .show_separator_line(false)
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(8, 8, 10, 190))
+                    .stroke(egui::Stroke::new(1.0, alpha(theme::LIGHT, 0.10)))
+                    .inner_margin(egui::Margin { left: 8, right: 8, top: 0, bottom: 12 }),
+            )
+            .show(ui, |ui| self.sidebar(ui));
+        egui::Panel::top("top").show_separator_line(false).show(ui, |ui| self.top_bar(ui));
         self.gamepad.poll(ctx);
 
         if self.tab != Tab::Audio {
@@ -402,12 +342,14 @@ impl eframe::App for App {
             .frame(egui::Frame::new().inner_margin(egui::Margin { left: 18, right: 18, top: 6, bottom: 18 }))
             .show(ui, |ui| {
                 // Fade + slide the page in when switching tabs.
-                let appear = page_appear(ctx, self.tab as u8);
+                let appear = if self.reduce_motion { 1.0 } else { page_appear(ctx, self.tab as u8) };
                 ui.set_opacity(appear);
                 ui.add_space((1.0 - appear) * 24.0);
                 self.keyboard.fit_height = ui.available_height();
                 self.mouse.fit_height = ui.available_height();
                 egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| match self.tab {
+                    Tab::Home => self.home_page(ui),
+                    Tab::Settings => self.settings_page(ui),
                     Tab::Keyboard => self.keyboard.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Mouse => self.mouse.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Gamepad => self.gamepad.ui(ui, &mut self.mascot, self.cjk),

@@ -20,6 +20,12 @@ pub struct Settings {
     pub cycle_secs: f32,
     /// Interface language the user picked (None = follow the system).
     pub lang: Option<crate::i18n::Lang>,
+    /// No falling petals or page animations.
+    pub reduce_motion: bool,
+    /// Show Neko-chan in the top bar.
+    pub show_mascot: bool,
+    /// Text size (egui zoom factor).
+    pub ui_scale: f32,
 }
 
 impl Default for Settings {
@@ -35,6 +41,9 @@ impl Default for Settings {
             auto_cycle: false,
             cycle_secs: 3.0,
             lang: None,
+            reduce_motion: false,
+            show_mascot: true,
+            ui_scale: 1.0,
         }
     }
 }

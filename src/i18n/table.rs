@@ -1,7 +1,7 @@
 //! Translations: one row per English string, columns [English, 简体中文, Bahasa Melayu, 日本語].
 //! `{0}`, `{1}`… are values filled in at run time and may be reordered.
 
-pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK];
+pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK, SHELL];
 
 const MAIN: &[[&str; 4]] = &[
     ["Keyboard", "键盘", "Papan Kekunci", "キーボード"],
@@ -163,7 +163,6 @@ const GAMEPAD: &[[&str; 4]] = &[
     ["Circle", "圈", "Bulatan", "マル"],
     ["Square", "方块", "Segi empat", "シカク"],
     ["Triangle", "三角", "Segi tiga", "サンカク"],
-    ["Home", "Home", "Home", "HOME"],
 ];
 
 const DISPLAY: &[[&str; 4]] = &[
@@ -398,4 +397,48 @@ const QUICK: &[[&str; 4]] = &[
     ["A guided tour through every test, one step at a time, ending with your report", "一步一步带你完成所有测试，最后生成报告", "Panduan melalui setiap ujian, satu langkah demi satu, berakhir dengan laporan anda", "すべてのテストを1ステップずつ案内し、最後にレポートを表示します"],
     ["✔ Quick check finished: every step was checked.", "✔ 快速检测完成：所有步骤都已检查。", "✔ Semakan pantas selesai: setiap langkah telah diperiksa.", "✔ クイックチェック完了: すべてのステップを確認しました。"],
     ["✔ Quick check finished. Skipped: {0}", "✔ 快速检测完成。已跳过：{0}", "✔ Semakan pantas selesai. Dilangkau: {0}", "✔ クイックチェック完了。スキップ: {0}"],
+];
+
+const SHELL: &[[&str; 4]] = &[
+    ["Home", "主页", "Utama", "ホーム"],
+    ["Quick check running…", "快速检测进行中……", "Semakan pantas sedang berjalan…", "クイックチェック実行中…"],
+    ["Welcome! Start the quick check, or pick a test below~ ♪", "欢迎！开始快速检测，或者在下面选一个测试吧~ ♪", "Selamat datang! Mulakan semakan pantas, atau pilih ujian di bawah~ ♪", "ようこそ！クイックチェックを始めるか、下からテストを選んでね~ ♪"],
+    ["Nice progress~ keep going! (≧▽≦)", "进展不错~ 继续加油！(≧▽≦)", "Kemajuan yang bagus~ teruskan! (≧▽≦)", "いい調子~ その調子で続けてね！(≧▽≦)"],
+    ["Welcome to Nyanspect", "欢迎使用 Nyanspect", "Selamat datang ke Nyanspect", "Nyanspect へようこそ"],
+    ["Check your keyboard, mouse, screen, speakers, microphone, camera and controller in a few minutes. Not sure where to start? The quick check walks you through everything.", "几分钟内检查你的键盘、鼠标、屏幕、扬声器、麦克风、摄像头和手柄。不知道从哪里开始？快速检测会一步步带你完成。", "Periksa papan kekunci, tetikus, skrin, pembesar suara, mikrofon, kamera dan pengawal anda dalam beberapa minit. Tidak pasti di mana hendak bermula? Semakan pantas akan membimbing anda melalui semuanya.", "キーボード、マウス、画面、スピーカー、マイク、カメラ、コントローラーを数分でチェック。どこから始めればいいか迷ったら、クイックチェックが全部案内します。"],
+    ["▶ Continue quick check", "▶ 继续快速检测", "▶ Teruskan semakan pantas", "▶ クイックチェックを続ける"],
+    ["▶ Start quick check", "▶ 开始快速检测", "▶ Mula semakan pantas", "▶ クイックチェック開始"],
+    ["📋 View report", "📋 查看报告", "📋 Lihat laporan", "📋 レポートを見る"],
+    ["This computer", "这台电脑", "Komputer ini", "このコンピューター"],
+    ["System", "系统", "Sistem", "システム"],
+    ["Graphics", "显卡", "Grafik", "グラフィックス"],
+    ["Screen", "屏幕", "Skrin", "画面"],
+    ["Version", "版本", "Versi", "バージョン"],
+    ["{0} of {1} tests done · {2} with issues", "已完成 {0} / {1} 项测试 · {2} 项有问题", "{0} daripada {1} ujian selesai · {2} ada masalah", "{1} 件中 {0} 件のテスト完了 · 問題あり {2}"],
+    ["{0} of {1} tests done", "已完成 {0} / {1} 项测试", "{0} daripada {1} ujian selesai", "{1} 件中 {0} 件のテスト完了"],
+    ["Open →", "打开 →", "Buka →", "開く →"],
+    ["Every key, stuck or double-typing keys, rollover", "每个按键、卡键或连击、多键同按", "Setiap kekunci, kekunci tersekat atau menaip dua kali, rollover", "全キー、引っかかりや二重入力、同時押し"],
+    ["Buttons, scrolling, double-click problems", "按键、滚轮、双击问题", "Butang, tatal, masalah dwiklik", "ボタン、スクロール、ダブルクリックの不具合"],
+    ["Buttons, triggers, stick drift and rumble", "按键、扳机、摇杆漂移和震动", "Butang, picu, hanyutan kayu bedik dan getaran", "ボタン、トリガー、スティックドリフト、振動"],
+    ["Dead pixels, backlight bleed, banding", "坏点、背光渗漏、色带", "Piksel mati, kebocoran lampu latar, jalur", "ドット抜け、バックライト漏れ、バンディング"],
+    ["Each speaker, and your microphone", "每个扬声器，以及你的麦克风", "Setiap pembesar suara, dan mikrofon anda", "各スピーカーとマイク"],
+    ["Live picture, resolution and frame rate", "实时画面、分辨率和帧率", "Gambar langsung, resolusi dan kadar bingkai", "ライブ映像、解像度、フレームレート"],
+    ["Make Nyanspect yours~ ♪", "把 Nyanspect 调成你喜欢的样子吧~ ♪", "Jadikan Nyanspect milik anda~ ♪", "Nyanspect を自分好みにしよう~ ♪"],
+    ["Until you pick one, Nyanspect follows your system language.", "在你选择之前，Nyanspect 会跟随系统语言。", "Sehingga anda memilih, Nyanspect mengikut bahasa sistem anda.", "選ぶまでは、システムの言語に合わせます。"],
+    ["Text size", "文字大小", "Saiz teks", "文字サイズ"],
+    ["Small", "小", "Kecil", "小"],
+    ["Normal", "标准", "Biasa", "標準"],
+    ["Large", "大", "Besar", "大"],
+    ["Extra large", "特大", "Sangat besar", "特大"],
+    ["Makes everything bigger or smaller, for small laptops or tired eyes.", "整体放大或缩小，适合小屏笔记本或眼睛疲劳时使用。", "Menjadikan semuanya lebih besar atau kecil, untuk komputer riba kecil atau mata yang letih.", "すべてを大きく・小さくします。小さなノートPCや目が疲れたときに。"],
+    ["Look & sound", "外观与声音", "Rupa & bunyi", "見た目と音"],
+    ["Keyboard sound effects", "键盘音效", "Kesan bunyi papan kekunci", "キーボードの効果音"],
+    ["Anime pop-ups and sounds when you press keys", "按键时显示动漫风弹出文字和声音", "Teks timbul dan bunyi anime apabila anda menekan kekunci", "キーを押すとアニメ風の文字と音が出ます"],
+    ["Reduce motion", "减少动画", "Kurangkan gerakan", "動きを減らす"],
+    ["Stops the falling petals and page animations; also easier on slow PCs", "停止飘落的花瓣和页面动画；在较慢的电脑上也更流畅", "Hentikan kelopak yang jatuh dan animasi halaman; juga lebih ringan untuk PC perlahan", "花びらとページのアニメーションを止めます。遅いPCにもやさしい設定です"],
+    ["Show Neko-chan", "显示猫咪 Neko-chan", "Tunjukkan Neko-chan", "ネコちゃんを表示"],
+    ["The cat who comments on your tests", "会对你的测试发表评论的小猫", "Kucing yang mengulas ujian anda", "テストにコメントしてくれるネコ"],
+    ["About", "关于", "Perihal", "情報"],
+    ["Nyanspect {0} · free and open source (MIT)", "Nyanspect {0} · 免费开源（MIT）", "Nyanspect {0} · percuma dan sumber terbuka (MIT)", "Nyanspect {0} · 無料のオープンソース（MIT）"],
+    ["Settings are saved automatically. Nothing you test ever leaves this computer.", "设置会自动保存。你测试的任何内容都不会离开这台电脑。", "Tetapan disimpan secara automatik. Tiada apa yang anda uji akan keluar dari komputer ini.", "設定は自動で保存されます。テスト内容がこのコンピューターの外に送られることはありません。"],
 ];
