@@ -15,12 +15,15 @@ memmap2 = "0.9.12"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 sys-locale = "0.3.2"
 serde = { version = "1.0.229", features = ["derive"] }
+sysinfo = { version = "0.40.4", default-features = false, features = ["system", "disk"] }
+starship-battery = "0.12.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 v4l = "0.14"
 
 [target.'cfg(windows)'.dependencies]
 nokhwa = { version = "0.10.11", default-features = false, features = ["input-msmf"] }
+windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation"] }
 
 [patch.crates-io]
 egui-winit = { path = "vendor/egui-winit" }

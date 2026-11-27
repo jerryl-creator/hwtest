@@ -24,6 +24,7 @@ fn blurb(tab: Tab) -> &'static str {
         Tab::Display => "Dead pixels, backlight bleed, banding",
         Tab::Audio => "Each speaker, and your microphone",
         Tab::Camera => "Live picture, resolution and frame rate",
+        Tab::System => "Model, serial number, specs and battery health",
         _ => "",
     }
 }
@@ -59,7 +60,7 @@ fn status_text(status: Status) -> &'static str {
 impl App {
     /// Work out every test page's result once for this frame.
     pub(crate) fn refresh_statuses(&mut self) {
-        let tabs = [Tab::Keyboard, Tab::Mouse, Tab::Gamepad, Tab::Display, Tab::Audio, Tab::Camera];
+        let tabs = [Tab::System, Tab::Keyboard, Tab::Mouse, Tab::Gamepad, Tab::Display, Tab::Audio, Tab::Camera];
         self.statuses = tabs.iter().filter_map(|t| self.compute_status(*t).map(|s| (*t, s))).collect();
     }
 
@@ -75,6 +76,7 @@ impl App {
             Tab::Gamepad => self.gamepad.report().status,
             Tab::Display => self.pixels.report().status,
             Tab::Camera => self.camera.report().status,
+            Tab::System => self.system.report().status,
             Tab::Audio => {
                 let (a, b) = (self.speakers.report().status, self.mic.report().status);
                 match (a, b) {
@@ -97,6 +99,7 @@ impl App {
         self.speakers.clear_results();
         self.mic.clear_results();
         self.camera.clear_results();
+        self.system.clear_results();
         self.report.quick_done = None;
         self.quick = None;
     }
@@ -104,7 +107,7 @@ impl App {
     pub(crate) fn start_quick_check(&mut self) {
         self.quick = Some(crate::quick::QuickCheck::new());
         self.report.quick_done = None;
-        self.tab = Tab::Keyboard;
+        self.tab = Tab::System;
     }
 
     // ---------------------------------------------------------------- sidebar
@@ -245,7 +248,7 @@ impl App {
     // ---------------------------------------------------------------- Home
 
     pub(crate) fn home_page(&mut self, ui: &mut egui::Ui) {
-        let tests = [Tab::Keyboard, Tab::Mouse, Tab::Display, Tab::Audio, Tab::Camera, Tab::Gamepad];
+        let tests = [Tab::System, Tab::Keyboard, Tab::Mouse, Tab::Display, Tab::Audio, Tab::Camera, Tab::Gamepad];
         let statuses: Vec<Status> = tests.iter().map(|t| self.tab_status(*t).unwrap_or(Status::NotTested)).collect();
         let tested = statuses.iter().filter(|s| **s != Status::NotTested).count();
         let issues = statuses.iter().filter(|s| **s == Status::Issue).count();
@@ -268,7 +271,7 @@ impl App {
                         ui.add_space(4.0);
                         ui.label(
                             egui::RichText::new(t(
-                                "Check your keyboard, mouse, screen, speakers, microphone, camera and controller in a few minutes. Not sure where to start? The quick check walks you through everything.",
+                                "Check the battery, keyboard, mouse, screen, speakers, microphone, camera and controller in a few minutes. Not sure where to start? The quick check walks you through everything.",
                             ))
                             .size(14.0)
                             .color(theme::TEXT),
@@ -301,12 +304,16 @@ impl App {
                         "linux" => "Linux",
                         other => other,
                     };
-                    let rows = [
+                    let model = self.system.model();
+                    let mut rows = vec![
                         (t("System"), format!("{os} ({})", std::env::consts::ARCH)),
                         (t("Graphics"), RENDERER_INFO.get().cloned().unwrap_or_else(|| "?".into())),
                         (t("Screen"), screen.map_or("?".into(), |s| format!("{:.0} × {:.0}", s.x, s.y))),
                         (t("Version"), env!("CARGO_PKG_VERSION").to_string()),
                     ];
+                    if let Some(m) = model {
+                        rows.insert(0, (t("Model"), m));
+                    }
                     egui::Grid::new("sysinfo").num_columns(2).spacing([14.0, 6.0]).show(ui, |ui| {
                         for (k, v) in rows {
                             ui.label(egui::RichText::new(k).size(13.0).color(theme::TEXT_DIM));

@@ -395,6 +395,7 @@ pub fn fancy_button(ui: &mut Ui, label: &str, size: Vec2, c1: Color32, c2: Color
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Icon {
     Home,
+    System,
     Keyboard,
     Mouse,
     Gamepad,
@@ -473,6 +474,17 @@ pub fn icon(p: &egui::Painter, kind: Icon, c: Pos2, size: f32, col: Color32) {
             line(&[(-5.0, -5.5), (-3.0, -8.5), (3.0, -8.5), (5.0, -5.5)]);
             p.circle_stroke(pt(0.0, 1.5), 4.2 * u, st);
             dot(7.5, -2.5, 1.0);
+        }
+        Icon::System => {
+            // A chip with pins.
+            frame(rect(-6.5, -6.5, 6.5, 6.5), 1.5);
+            frame(rect(-2.5, -2.5, 2.5, 2.5), 0.5);
+            for k in [-3.5f32, 0.0, 3.5] {
+                line(&[(k, -6.5), (k, -10.0)]);
+                line(&[(k, 6.5), (k, 10.0)]);
+                line(&[(-6.5, k), (-10.0, k)]);
+                line(&[(6.5, k), (10.0, k)]);
+            }
         }
         Icon::Report => {
             frame(rect(-7.5, -8.5, 7.5, 10.5), 1.5);

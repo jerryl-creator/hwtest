@@ -17,6 +17,7 @@ mod shell;
 mod sfx;
 mod sfx_audio;
 mod speakers;
+mod system;
 mod theme;
 
 use eframe::egui::{self, Align2, Color32, Sense, Vec2};
@@ -26,6 +27,7 @@ use theme::alpha;
 #[derive(PartialEq, Clone, Copy)]
 enum Tab {
     Home,
+    System,
     Keyboard,
     Mouse,
     Gamepad,
@@ -39,6 +41,7 @@ enum Tab {
 /// Pages: (page, icon, English name, Japanese name). Settings sits at the bottom of the sidebar.
 const TABS: &[(Tab, theme::Icon, &str, &str)] = &[
     (Tab::Home, theme::Icon::Home, "Home", "ホーム"),
+    (Tab::System, theme::Icon::System, "System", "システム"),
     (Tab::Keyboard, theme::Icon::Keyboard, "Keyboard", "キーボード"),
     (Tab::Mouse, theme::Icon::Mouse, "Mouse", "マウス"),
     (Tab::Gamepad, theme::Icon::Gamepad, "Gamepad", "ゲームパッド"),
@@ -61,6 +64,7 @@ struct App {
     mouse: mouse::MouseTest,
     gamepad: gamepad::GamepadTest,
     camera: camera::CameraTest,
+    system: system::SystemPage,
     report: report::ReportTab,
     /// The guided quick check, while it's running.
     quick: Option<quick::QuickCheck>,
@@ -110,6 +114,7 @@ impl App {
             mouse: mouse::MouseTest::default(),
             gamepad: gamepad::GamepadTest::default(),
             camera: camera::CameraTest::default(),
+            system: system::SystemPage::new(),
             report: report::ReportTab::default(),
             lang_choice: saved.lang,
             quick: None,
@@ -126,7 +131,7 @@ impl App {
         }
         // Ctrl +/- would zoom the app while someone is testing those keys.
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
-        // Dev: NYANSPECT_QUICK=<step 0-6> starts the quick check at that step.
+        // Dev: NYANSPECT_QUICK=<step 0-7> starts the quick check at that step.
         if let Some(step) = std::env::var("NYANSPECT_QUICK").ok().and_then(|v| v.parse::<usize>().ok()) {
             let mut q = quick::QuickCheck::new();
             q.current = step.min(quick::STEPS.len() - 1);
@@ -143,6 +148,7 @@ impl App {
     /// A quick-check step's live result: the same status the report shows.
     fn step_status(&self, step: quick::Step) -> report::Status {
         match step {
+            quick::Step::System => self.system.report().status,
             quick::Step::Keyboard => self.keyboard.report().status,
             quick::Step::Mouse => self.mouse.report().status,
             quick::Step::Display => self.pixels.report().status,
@@ -325,7 +331,7 @@ impl eframe::App for App {
 
         // Quick check guide bar along the bottom.
         if self.quick.is_some() {
-            let step = self.quick.as_ref().map_or(quick::Step::Keyboard, |q| q.step());
+            let step = self.quick.as_ref().map_or(quick::Step::System, |q| q.step());
             let status = self.step_status(step);
             let available = step != quick::Step::Gamepad || self.gamepad.connected();
             let on_tab = self.tab == tab_for(step);
@@ -367,8 +373,13 @@ impl eframe::App for App {
                     Tab::Gamepad => self.gamepad.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Display => self.pixels.ui(ui, &mut self.mascot, self.cjk),
                     Tab::Camera => self.camera.ui(ui, &mut self.mascot, self.cjk),
+                    Tab::System => {
+                        let renderer = RENDERER_INFO.get().cloned().unwrap_or_else(|| "?".into());
+                        self.system.ui(ui, &mut self.mascot, self.cjk, &renderer);
+                    }
                     Tab::Report => {
                         let sections = [
+                            self.system.report(),
                             self.keyboard.report(),
                             self.mouse.report(),
                             self.gamepad.report(),
@@ -398,6 +409,7 @@ impl eframe::App for App {
 /// The tab where a quick-check step happens.
 fn tab_for(step: quick::Step) -> Tab {
     match step {
+        quick::Step::System => Tab::System,
         quick::Step::Keyboard => Tab::Keyboard,
         quick::Step::Mouse => Tab::Mouse,
         quick::Step::Display => Tab::Display,

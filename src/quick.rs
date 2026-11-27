@@ -10,6 +10,7 @@ use eframe::egui::{self, Align2, Color32, Pos2, Sense, Stroke, Vec2};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Step {
+    System,
     Keyboard,
     Mouse,
     Display,
@@ -19,11 +20,12 @@ pub enum Step {
     Gamepad,
 }
 
-pub const STEPS: [Step; 7] = [Step::Keyboard, Step::Mouse, Step::Display, Step::Speakers, Step::Microphone, Step::Camera, Step::Gamepad];
+pub const STEPS: [Step; 8] = [Step::System, Step::Keyboard, Step::Mouse, Step::Display, Step::Speakers, Step::Microphone, Step::Camera, Step::Gamepad];
 
 impl Step {
     pub fn name(self) -> &'static str {
         match self {
+            Step::System => "System",
             Step::Keyboard => "Keyboard",
             Step::Mouse => "Mouse",
             Step::Display => "Display",
@@ -36,6 +38,7 @@ impl Step {
 
     fn how(self) -> &'static str {
         match self {
+            Step::System => "Check the model, serial number and battery health, then press Next.",
             Step::Keyboard => "Press every key once: each one lights up when it works. Press Next when you're done.",
             Step::Mouse => "Click each mouse button, scroll up and down, and double-click in the box.",
             Step::Display => "Press “Start fullscreen test”, look for odd dots on every colour, then press Esc.",
@@ -220,10 +223,11 @@ mod tests {
     #[test]
     fn steps_record_checked_and_skipped() {
         let mut q = QuickCheck::new();
+        assert_eq!(q.advance(Status::Pass, false), Action::Goto(Step::Keyboard));
         assert_eq!(q.advance(Status::Pass, false), Action::Goto(Step::Mouse));
         assert_eq!(q.advance(Status::NotTested, false), Action::Goto(Step::Display)); // untested → skipped
         assert_eq!(q.advance(Status::InProgress, true), Action::Goto(Step::Speakers)); // Skip pressed
-        assert_eq!(q.outcomes[..3], [Outcome::Checked, Outcome::Skipped, Outcome::Skipped]);
+        assert_eq!(q.outcomes[..4], [Outcome::Checked, Outcome::Checked, Outcome::Skipped, Outcome::Skipped]);
         assert_eq!(q.skipped(), vec![Step::Mouse, Step::Display]);
     }
 
@@ -231,7 +235,7 @@ mod tests {
     fn back_reopens_the_previous_step_and_the_last_step_finishes() {
         let mut q = QuickCheck::new();
         q.advance(Status::Pass, false);
-        assert_eq!(q.back(), Action::Goto(Step::Keyboard));
+        assert_eq!(q.back(), Action::Goto(Step::System));
         assert_eq!(q.outcomes[0], Outcome::Pending);
         q.current = STEPS.len() - 1;
         assert_eq!(q.advance(Status::Pass, false), Action::Finish);
