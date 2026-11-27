@@ -1,7 +1,7 @@
 //! Translations: one row per English string, columns [English, 简体中文, Bahasa Melayu, 日本語].
 //! `{0}`, `{1}`… are values filled in at run time and may be reordered.
 
-pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK, SHELL, POLISH, SYSTEM];
+pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK, SHELL, POLISH, SYSTEM, DRIFT];
 
 const MAIN: &[[&str; 4]] = &[
     ["Keyboard", "键盘", "Papan Kekunci", "キーボード"],
@@ -134,8 +134,6 @@ const GAMEPAD: &[[&str; 4]] = &[
     ["Plug in or pair a controller, then press a button~", "插上或配对一个手柄，然后按个键吧~", "Pasang atau padankan pengawal, kemudian tekan butang~", "コントローラーを接続かペアリングして、ボタンを押してね~"],
     ["Your controller is perfect! ＼(^o^)／", "你的手柄完美无缺！＼(^o^)／", "Pengawal anda sempurna! ＼(^o^)／", "コントローラーは完璧！＼(^o^)／"],
     ["Press every button and roll both sticks around~ ♪", "按下每个按键，并转动两个摇杆~ ♪", "Tekan setiap butang dan putar kedua-dua kayu bedik~ ♪", "全部のボタンを押して、両スティックをぐるっと回してね~ ♪"],
-    ["〰 Rumble", "〰 震动", "〰 Getar", "〰 振動"],
-    ["Vibrate the controller", "让手柄震动", "Getarkan pengawal", "コントローラーを振動させる"],
     ["This controller doesn't support vibration here", "这个手柄在这里不支持震动", "Pengawal ini tidak menyokong getaran di sini", "このコントローラーはここでは振動に対応していません"],
     ["Controllers unavailable: {0}", "无法使用手柄：{0}", "Pengawal tidak tersedia: {0}", "コントローラーを使用できません: {0}"],
     ["No controller connected", "未连接手柄", "Tiada pengawal disambung", "コントローラー未接続"],
@@ -513,4 +511,39 @@ const SYSTEM: &[[&str; 4]] = &[
     ["{0} ({1} cores)", "{0}（{1} 核）", "{0} ({1} teras)", "{0}（{1} コア）"],
     ["{0} GB ({1} GB usable)", "{0} GB（可用 {1} GB）", "{0} GB ({1} GB boleh guna)", "{0} GB（使用可能 {1} GB）"],
     ["{0} (motherboard)", "{0}（主板）", "{0} (papan induk)", "{0}（マザーボード）"],
+];
+
+const DRIFT: &[[&str; 4]] = &[
+    ["Stick drift test", "摇杆漂移测试", "Ujian hanyutan batang kawalan", "スティックのドリフトテスト"],
+    ["Left stick", "左摇杆", "Batang kiri", "左スティック"],
+    ["Right stick", "右摇杆", "Batang kanan", "右スティック"],
+    ["Hands off the sticks… measuring~", "手离开摇杆…正在测量~", "Lepaskan tangan dari batang… sedang mengukur~", "スティックから手を離してね…測定中~"],
+    ["Put the controller down and let go of both sticks, then press Measure. Nyanspect reads where each stick rests for 3 seconds.", "把手柄放下，松开两个摇杆，然后按“测量”。Nyanspect 会在 3 秒内读取每个摇杆的静止位置。", "Letakkan pengawal dan lepaskan kedua-dua batang, kemudian tekan Ukur. Nyanspect membaca kedudukan rehat setiap batang selama 3 saat.", "コントローラーを置いて両方のスティックから手を離し、「測定」を押してください。3 秒間、各スティックの止まる位置を読み取ります。"],
+    ["▶ Measure drift", "▶ 测量漂移", "▶ Ukur hanyutan", "▶ ドリフトを測定"],
+    ["↻ Measure again", "↻ 重新测量", "↻ Ukur semula", "↻ もう一度測定"],
+    ["Connect a controller first.", "请先连接手柄。", "Sambungkan pengawal dahulu.", "先にコントローラーを接続してください。"],
+    ["Hands off… {0} s", "别碰摇杆… {0} 秒", "Jangan sentuh… {0} s", "手を離して… {0} 秒"],
+    ["{0}% off-centre", "偏离中心 {0}%", "{0}% lari dari tengah", "中心から {0}% ずれ"],
+    ["Jitter: {0}%", "抖动：{0}%", "Getaran: {0}%", "ぶれ：{0}%"],
+    ["centres well", "回中良好", "kembali ke tengah dengan baik", "きちんと中央に戻ります"],
+    ["slight drift, most games hide it", "轻微漂移，大多数游戏会忽略", "hanyutan sedikit, kebanyakan permainan menyembunyikannya", "軽いドリフト（ほとんどのゲームでは気になりません）"],
+    ["drift, games may move on their own", "漂移，游戏中可能会自己移动", "hanyutan, permainan mungkin bergerak sendiri", "ドリフトあり（ゲームで勝手に動くことがあります）"],
+    ["moved during the test, try again", "测试中摇杆被移动，请重试", "bergerak semasa ujian, cuba lagi", "テスト中に動きました。もう一度どうぞ"],
+    ["A stick moved during the test. Let go of both sticks completely and try again.", "测试中有摇杆被移动了。请完全松开两个摇杆后重试。", "Satu batang bergerak semasa ujian. Lepaskan kedua-dua batang sepenuhnya dan cuba lagi.", "テスト中にスティックが動きました。両方のスティックから完全に手を離して、もう一度お試しください。"],
+    ["Under 5% off-centre is normal. 5–10% is slight drift that most games hide with their own dead zone. Over 10%, characters or cameras may move on their own.", "偏离中心 5% 以内属于正常。5–10% 是轻微漂移，大多数游戏的死区会把它忽略。超过 10%，角色或视角可能会自己移动。", "Bawah 5% dari tengah adalah normal. 5–10% ialah hanyutan sedikit yang disembunyikan oleh zon mati kebanyakan permainan. Lebih 10%, watak atau kamera mungkin bergerak sendiri.", "中心からのずれが 5% 未満なら正常です。5〜10% は軽いドリフトで、ほとんどのゲームはデッドゾーンで無視します。10% を超えると、キャラクターやカメラが勝手に動くことがあります。"],
+    ["Left stick at rest: {0}% off-centre, {1}", "左摇杆静止时：偏离中心 {0}%，{1}", "Batang kiri semasa rehat: {0}% lari dari tengah, {1}", "左スティック（静止時）：中心から {0}% ずれ、{1}"],
+    ["Right stick at rest: {0}% off-centre, {1}", "右摇杆静止时：偏离中心 {0}%，{1}", "Batang kanan semasa rehat: {0}% lari dari tengah, {1}", "右スティック（静止時）：中心から {0}% ずれ、{1}"],
+    ["Vibration", "振动", "Getaran", "振動"],
+    ["〰 Strong motor", "〰 强振马达", "〰 Motor kuat", "〰 強モーター"],
+    ["〰 Weak motor", "〰 弱振马达", "〰 Motor lemah", "〰 弱モーター"],
+    ["〰 Both", "〰 两个一起", "〰 Kedua-dua", "〰 両方"],
+    ["Usually in the left grip: a deep rumble", "通常在左握把：低沉的震动", "Biasanya di genggaman kiri: gegaran dalam", "たいてい左グリップ側：低く重い振動"],
+    ["Usually in the right grip: a fine buzz", "通常在右握把：细微的嗡嗡震动", "Biasanya di genggaman kanan: dengungan halus", "たいてい右グリップ側：細かい振動"],
+    ["Both motors at once", "两个马达同时振动", "Kedua-dua motor serentak", "両方のモーターを同時に"],
+    ["Did you feel it vibrate?", "感觉到振动了吗？", "Adakah anda rasa ia bergetar?", "振動を感じましたか？"],
+    ["✔ Vibration works", "✔ 振动正常", "✔ Getaran berfungsi", "✔ 振動OK"],
+    ["⚠ A motor may be broken or disconnected", "⚠ 马达可能已损坏或断开", "⚠ Motor mungkin rosak atau tertanggal", "⚠ モーターが壊れているか外れているかもしれません"],
+    ["Try each motor on its own: if one never vibrates, it's broken or unplugged inside the controller.", "分别测试每个马达：如果某个始终不振动，说明它在手柄内部损坏或松脱了。", "Cuba setiap motor satu persatu: jika satu tidak pernah bergetar, ia rosak atau tertanggal di dalam pengawal.", "モーターを 1 つずつ試してください。どちらかがまったく振動しなければ、コントローラー内部で壊れているか外れています。"],
+    ["Vibration: works", "振动：正常", "Getaran: berfungsi", "振動：OK"],
+    ["Vibration: not felt", "振动：没有感觉到", "Getaran: tidak dirasai", "振動：感じられず"],
 ];

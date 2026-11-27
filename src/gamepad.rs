@@ -4,7 +4,7 @@ use crate::i18n::t;
 use crate::theme::{self, alpha, lerp_color, Mascot};
 use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use gilrs::{Axis, Button, GamepadId, Gilrs};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 /// The buttons we test. gilrs names them by position (South = bottom face button).
 pub const BUTTONS: [Button; 17] = [
@@ -187,6 +187,71 @@ impl StickWatch {
     }
 }
 
+/// Rest offsets: under SLIGHT a stick centres well, from DRIFT up games may move on their own
+/// (many games ignore the middle 10–20%, so slight drift is usually hidden).
+pub const SLIGHT: f32 = 0.05;
+pub const DRIFT: f32 = 0.10;
+/// How long the "let go of both sticks" measurement runs.
+const MEASURE_SECS: f64 = 3.0;
+/// The drift plot shows the middle quarter of the stick's travel.
+const ZOOM: f32 = 0.25;
+/// Live samples kept for the plot (about 1.5 s).
+const TRAIL: usize = 90;
+
+/// Where a stick rested during the measurement.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rest {
+    /// Average position (0 = dead centre, 1 = the edge).
+    pub offset: Vec2,
+    /// Furthest any sample was from the average: the stick's jitter.
+    pub spread: f32,
+    /// The stick was moved during the test, so the result means nothing.
+    pub moved: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Level {
+    Good,
+    Slight,
+    Drift,
+    Moved,
+}
+
+impl Rest {
+    pub fn level(&self) -> Level {
+        let off = self.offset.length();
+        if self.moved {
+            Level::Moved
+        } else if off >= DRIFT {
+            Level::Drift
+        } else if off >= SLIGHT {
+            Level::Slight
+        } else {
+            Level::Good
+        }
+    }
+}
+
+/// Average position and jitter of a stick that should be resting. None if too few samples.
+pub fn analyse(samples: &[Vec2]) -> Option<Rest> {
+    if samples.len() < 10 {
+        return None;
+    }
+    let mean = samples.iter().fold(Vec2::ZERO, |a, v| a + *v) / samples.len() as f32;
+    let spread = samples.iter().map(|v| (*v - mean).length()).fold(0.0, f32::max);
+    let moved = spread > 0.15 || samples.iter().any(|v| v.length() > 0.5);
+    Some(Rest { offset: mean, spread, moved })
+}
+
+fn level_text(l: Level) -> &'static str {
+    match l {
+        Level::Good => "centres well",
+        Level::Slight => "slight drift, most games hide it",
+        Level::Drift => "drift, games may move on their own",
+        Level::Moved => "moved during the test, try again",
+    }
+}
+
 pub struct GamepadTest {
     gilrs: Option<Gilrs>,
     error: Option<String>,
@@ -203,15 +268,56 @@ pub struct GamepadTest {
     detected: Style,
     /// What the layout picker is set to.
     pub choice: Choice,
+    /// Recent raw stick positions (left, right) for the drift plot.
+    trail: [VecDeque<Vec2>; 2],
+    /// The drift measurement: when it started, and the samples so far.
+    measuring: Option<f64>,
+    samples: [Vec<Vec2>; 2],
+    pub measured: Option<[Rest; 2]>,
+    /// Each stick's dead zone as the controller reports it, if it does.
+    deadzones: [Option<f32>; 2],
+    /// Which rumble was tried last, and the user's answer to "did you feel it?".
+    rumble_kind: Option<Motor>,
+    pub rumble_felt: Option<bool>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Motor {
+    Strong,
+    Weak,
+    Both,
 }
 
 impl Default for GamepadTest {
     fn default() -> Self {
-        let (gilrs, error) = match Gilrs::new() {
+        // Raw stick values: gilrs' default filters zero everything inside the controller's
+        // dead zone, which would hide mild drift. The D-pad and jitter filters run in poll().
+        let (gilrs, error) = match gilrs::GilrsBuilder::new().with_default_filters(false).set_update_state(false).build() {
             Ok(g) => (Some(g), None),
             Err(e) => (None, Some(e.to_string())),
         };
-        Self { gilrs, error, active: None, tested: HashSet::new(), left: Default::default(), right: Default::default(), rumble_tried: false, effect: None, name: None, detected: Style::Xbox, choice: dev_choice() }
+        let mut s = Self {
+            gilrs,
+            error,
+            active: None,
+            tested: HashSet::new(),
+            left: Default::default(),
+            right: Default::default(),
+            rumble_tried: false,
+            effect: None,
+            name: None,
+            detected: Style::Xbox,
+            choice: dev_choice(),
+            trail: Default::default(),
+            measuring: None,
+            samples: Default::default(),
+            measured: None,
+            deadzones: [None, None],
+            rumble_kind: None,
+            rumble_felt: None,
+        };
+        s.apply_demo();
+        s
     }
 }
 
@@ -231,7 +337,14 @@ impl GamepadTest {
         let Some(g) = self.gilrs.as_mut() else { return };
         let now = ctx.input(|i| i.time);
         let mut any = false;
-        while let Some(ev) = g.next_event() {
+        use gilrs::ev::filter::{axis_dpad_to_button, Filter, Jitter};
+        let jitter = Jitter::new();
+        while let Some(raw) = g.next_event() {
+            let Some(ev) = Some(raw).filter_ev(&axis_dpad_to_button, g).filter_ev(&jitter, g) else { continue };
+            if ev.is_dropped() {
+                continue;
+            }
+            g.update(&ev);
             any = true;
             // Follow whichever pad was used last.
             if self.active != Some(ev.id) {
@@ -261,6 +374,21 @@ impl GamepadTest {
             let r = Vec2::new(pad.value(Axis::RightStickX), -pad.value(Axis::RightStickY));
             self.left.update(l, now);
             self.right.update(r, now);
+            let dz = |x: Axis| pad.axis_code(x).and_then(|c| pad.deadzone(c));
+            self.deadzones = [dz(Axis::LeftStickX), dz(Axis::RightStickX)];
+            for (i, v) in [l, r].into_iter().enumerate() {
+                self.trail[i].push_back(v);
+                while self.trail[i].len() > TRAIL {
+                    self.trail[i].pop_front();
+                }
+            }
+            if let Some(start) = self.measuring {
+                self.samples[0].push(l);
+                self.samples[1].push(r);
+                if now - start >= MEASURE_SECS {
+                    self.finish_measuring();
+                }
+            }
         }
         if any {
             ctx.request_repaint();
@@ -298,10 +426,13 @@ impl GamepadTest {
         use crate::report::{Section, Status};
         let style = self.style();
         let done = BUTTONS.iter().filter(|b| self.tested.contains(b)).count();
-        let drift = self.left.drift.is_some() || self.right.drift.is_some();
-        let status = if drift {
+        let measured_drift = self.measured.is_some_and(|m| m.iter().any(|r| r.level() == Level::Drift));
+        let drift = self.left.drift.is_some() || self.right.drift.is_some() || measured_drift;
+        let status = if drift || self.rumble_felt == Some(false) {
             Status::Issue
-        } else if self.name.is_none() || (done == 0 && self.left.max_reach < 0.05 && self.right.max_reach < 0.05) {
+        } else if self.name.is_none()
+            || (done == 0 && self.left.max_reach < 0.05 && self.right.max_reach < 0.05 && self.measured.is_none())
+        {
             Status::NotTested
         } else if done == BUTTONS.len() && self.left_ok() && self.right_ok() {
             Status::Pass
@@ -328,8 +459,22 @@ impl GamepadTest {
             let drift = w.drift.map_or(String::new(), |v| tr!(", DRIFT: rests {0}% off-centre", format!("{:.0}", v.length() * 100.0)));
             lines.push(if left { tr!("Left stick: {0}{1}", range, drift) } else { tr!("Right stick: {0}{1}", range, drift) });
         }
-        if self.rumble_tried {
-            lines.push(t("Rumble: tried").into());
+        if let Some(m) = self.measured {
+            for (left, r) in [(true, m[0]), (false, m[1])] {
+                let pct = format!("{:.1}", r.offset.length() * 100.0);
+                let verdict = t(level_text(r.level()));
+                lines.push(if left {
+                    tr!("Left stick at rest: {0}% off-centre, {1}", pct, verdict)
+                } else {
+                    tr!("Right stick at rest: {0}% off-centre, {1}", pct, verdict)
+                });
+            }
+        }
+        match self.rumble_felt {
+            Some(true) => lines.push(t("Vibration: works").into()),
+            Some(false) => lines.push(t("Vibration: not felt").into()),
+            None if self.rumble_tried => lines.push(t("Rumble: tried").into()),
+            None => {}
         }
         Section { title: "Gamepad", jp: "ゲームパッド", status, lines }
     }
@@ -339,32 +484,78 @@ impl GamepadTest {
         self.left = Default::default();
         self.right = Default::default();
         self.rumble_tried = false;
+        self.rumble_kind = None;
+        self.rumble_felt = None;
+        self.measuring = None;
+        self.measured = None;
+        self.samples = Default::default();
     }
 
-    fn rumble(&mut self) {
-        let (Some(g), Some(id)) = (self.gilrs.as_mut(), self.active) else { return };
-        use gilrs::ff::{BaseEffect, BaseEffectType, EffectBuilder, Replay, Ticks};
-        let effect = EffectBuilder::new()
-            .add_effect(BaseEffect {
-                kind: BaseEffectType::Strong { magnitude: 45_000 },
-                scheduling: Replay { play_for: Ticks::from_ms(500), ..Default::default() },
-                ..Default::default()
-            })
-            .add_effect(BaseEffect {
-                kind: BaseEffectType::Weak { magnitude: 45_000 },
-                scheduling: Replay { after: Ticks::from_ms(550), play_for: Ticks::from_ms(400), ..Default::default() },
-                ..Default::default()
-            })
-            .gamepads(&[id])
-            .finish(g);
-        if let Ok(e) = effect {
-            let _ = e.play();
-            self.effect = Some(e);
-            self.rumble_tried = true;
+    fn start_measuring(&mut self, now: f64) {
+        self.measuring = Some(now);
+        self.samples = Default::default();
+    }
+
+    fn finish_measuring(&mut self) {
+        self.measuring = None;
+        if let (Some(l), Some(r)) = (analyse(&self.samples[0]), analyse(&self.samples[1])) {
+            self.measured = Some([l, r]);
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, _cjk: bool) {
+    /// Dev: NYANSPECT_DRIFT_DEMO=1 fills in a measurement (left centres well, right drifts).
+    fn apply_demo(&mut self) {
+        if std::env::var("NYANSPECT_DRIFT_DEMO").is_err() {
+            return;
+        }
+        let mut seed = 7u32;
+        let mut noise = || {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            (seed >> 16) as f32 / 65_536.0 - 0.5
+        };
+        for i in 0..TRAIL {
+            self.trail[0].push_back(Vec2::new(0.021 + noise() * 0.02, -0.013 + noise() * 0.02));
+            self.trail[1].push_back(Vec2::new(0.128 + noise() * 0.03, 0.061 + noise() * 0.03));
+            if i % 2 == 0 {
+                let (l, r) = (*self.trail[0].back().unwrap(), *self.trail[1].back().unwrap());
+                self.samples[0].push(l);
+                self.samples[1].push(r);
+            }
+        }
+        self.finish_measuring();
+        self.deadzones = [Some(0.08), Some(0.08)];
+        self.name = Some("Demo Controller".into());
+        self.rumble_kind = Some(Motor::Both);
+    }
+
+    fn rumble(&mut self, motor: Motor) {
+        let (Some(g), Some(id)) = (self.gilrs.as_mut(), self.active) else { return };
+        use gilrs::ff::{BaseEffect, BaseEffectType, EffectBuilder, Replay, Ticks};
+        let mut builder = EffectBuilder::new();
+        if motor != Motor::Weak {
+            builder.add_effect(BaseEffect {
+                kind: BaseEffectType::Strong { magnitude: 45_000 },
+                scheduling: Replay { play_for: Ticks::from_ms(700), ..Default::default() },
+                ..Default::default()
+            });
+        }
+        if motor != Motor::Strong {
+            builder.add_effect(BaseEffect {
+                kind: BaseEffectType::Weak { magnitude: 50_000 },
+                scheduling: Replay { play_for: Ticks::from_ms(700), ..Default::default() },
+                ..Default::default()
+            });
+        }
+        if let Ok(e) = builder.gamepads(&[id]).finish(g) {
+            let _ = e.play();
+            self.effect = Some(e);
+            self.rumble_tried = true;
+            self.rumble_kind = Some(motor);
+            self.rumble_felt = None;
+        }
+    }
+
+    pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, cjk: bool) {
         let now = ui.input(|i| i.time);
         let pad = self.gilrs.as_ref().and_then(|g| self.active.and_then(|id| g.connected_gamepad(id)));
         let connected = pad.is_some();
@@ -384,7 +575,10 @@ impl GamepadTest {
         let done = BUTTONS.iter().filter(|b| self.tested.contains(b)).count();
         let style = self.style();
 
-        if self.left.drift.is_some() || self.right.drift.is_some() {
+        let measured_drift = self.measured.is_some_and(|m| m.iter().any(|r| r.level() == Level::Drift));
+        if self.measuring.is_some() {
+            mascot.say(t("Hands off the sticks… measuring~"));
+        } else if self.left.drift.is_some() || self.right.drift.is_some() || measured_drift {
             mascot.say(t("A stick isn't centring… stick drift! (；ω；)"));
         } else if !connected {
             mascot.say(t("Plug in or pair a controller, then press a button~"));
@@ -399,12 +593,6 @@ impl GamepadTest {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if theme::fancy_button(ui, t("↺ Reset"), Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
                         self.reset();
-                    }
-                    ui.add_space(6.0);
-                    let rumble = theme::fancy_button(ui, t("〰 Rumble"), Vec2::new(120.0, 32.0), theme::ACCENT, theme::SILVER, ff)
-                        .on_hover_text(if ff { t("Vibrate the controller") } else { t("This controller doesn't support vibration here") });
-                    if rumble.clicked() {
-                        self.rumble();
                     }
                     ui.add_space(10.0);
                     let label = match (&self.error, &self.name, connected) {
@@ -469,6 +657,145 @@ impl GamepadTest {
                 )
                 .size(12.0)
                 .color(theme::TEXT_DIM),
+            );
+        });
+        ui.add_space(12.0);
+        let demo = std::env::var("NYANSPECT_DRIFT_DEMO").is_ok();
+        self.drift_card(ui, cjk, connected || demo, connected.then_some((ls, rs)), now);
+        ui.add_space(12.0);
+        self.vibration_card(ui, cjk, ff, demo);
+    }
+
+    fn drift_card(&mut self, ui: &mut egui::Ui, cjk: bool, available: bool, live: Option<(Vec2, Vec2)>, now: f64) {
+        theme::card().show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            theme::card_title(ui, "Stick drift test", "スティックのドリフト", cjk);
+            let plot = ((ui.available_width() - 420.0) / 2.0).clamp(150.0, 230.0);
+            ui.horizontal_top(|ui| {
+                for (i, (name, live)) in [(t("Left stick"), live.map(|l| l.0)), (t("Right stick"), live.map(|l| l.1))].into_iter().enumerate() {
+                    ui.vertical(|ui| {
+                        ui.set_width(plot);
+                        ui.label(egui::RichText::new(name).font(theme::bold(13.5)).color(Color32::WHITE));
+                        let (rect, _) = ui.allocate_exact_size(Vec2::splat(plot), Sense::hover());
+                        let rest = self.measured.map(|m| m[i]);
+                        draw_rest_plot(ui.painter(), rect, &self.trail[i], rest, self.deadzones[i], live);
+                        if let Some(r) = rest {
+                            let level = r.level();
+                            let text = tr!("{0}% off-centre", format!("{:.1}", r.offset.length() * 100.0));
+                            ui.label(egui::RichText::new(text).font(theme::bold(15.0)).color(Color32::WHITE));
+                            let col = if matches!(level, Level::Drift) { theme::GLINT } else { theme::TEXT };
+                            let mark = match level {
+                                Level::Good => "✔ ",
+                                Level::Drift | Level::Moved => "⚠ ",
+                                Level::Slight => "",
+                            };
+                            ui.label(egui::RichText::new(format!("{mark}{}", t(level_text(level)))).size(13.0).color(col));
+                            ui.label(egui::RichText::new(tr!("Jitter: {0}%", format!("{:.1}", r.spread * 100.0))).size(12.0).color(theme::TEXT_DIM));
+                        }
+                    });
+                    ui.add_space(18.0);
+                }
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new(t(
+                            "Put the controller down and let go of both sticks, then press Measure. Nyanspect reads where each stick rests for 3 seconds.",
+                        ))
+                        .size(13.5)
+                        .color(theme::TEXT),
+                    );
+                    ui.add_space(8.0);
+                    match self.measuring {
+                        Some(start) => {
+                            let left = (MEASURE_SECS - (now - start)).max(0.0);
+                            let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width().min(260.0), 10.0), Sense::hover());
+                            let p = ui.painter();
+                            p.rect_filled(bar, 5.0, Color32::from_rgb(34, 34, 38));
+                            let frac = (1.0 - left / MEASURE_SECS) as f32;
+                            theme::hgradient(p, Rect::from_min_size(bar.min, Vec2::new(bar.width() * frac, bar.height())), 5.0, theme::STEEL, Color32::WHITE);
+                            ui.label(egui::RichText::new(tr!("Hands off… {0} s", format!("{:.0}", left.ceil()))).font(theme::bold(14.0)).color(Color32::WHITE));
+                            ui.ctx().request_repaint();
+                        }
+                        None => {
+                            let label = if self.measured.is_some() { t("↻ Measure again") } else { t("▶ Measure drift") };
+                            if theme::fancy_button(ui, label, Vec2::new(180.0, 38.0), theme::ACCENT, theme::SILVER, available && self.active.is_some()).clicked() {
+                                self.start_measuring(now);
+                            }
+                            if !available {
+                                ui.label(egui::RichText::new(t("Connect a controller first.")).size(12.5).color(theme::TEXT_DIM));
+                            }
+                        }
+                    }
+                    if self.measured.is_some_and(|m| m.iter().any(|r| r.moved)) {
+                        ui.label(
+                            egui::RichText::new(t("A stick moved during the test. Let go of both sticks completely and try again."))
+                                .font(theme::bold(13.0))
+                                .color(Color32::WHITE),
+                        );
+                    }
+                    ui.add_space(8.0);
+                    ui.label(
+                        egui::RichText::new(t(
+                            "Under 5% off-centre is normal. 5–10% is slight drift that most games hide with their own dead zone. Over 10%, characters or cameras may move on their own.",
+                        ))
+                        .size(12.0)
+                        .color(theme::TEXT_DIM),
+                    );
+                });
+            });
+        });
+    }
+
+    fn vibration_card(&mut self, ui: &mut egui::Ui, cjk: bool, ff: bool, demo: bool) {
+        theme::card().show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            theme::card_title(ui, "Vibration", "振動", cjk);
+            let can = ff || demo;
+            ui.horizontal(|ui| {
+                for (motor, label, hint) in [
+                    (Motor::Strong, t("〰 Strong motor"), t("Usually in the left grip: a deep rumble")),
+                    (Motor::Weak, t("〰 Weak motor"), t("Usually in the right grip: a fine buzz")),
+                    (Motor::Both, t("〰 Both"), t("Both motors at once")),
+                ] {
+                    if theme::fancy_button(ui, label, Vec2::new(150.0, 36.0), theme::LIGHT, theme::SILVER, ff).on_hover_text(hint).clicked() {
+                        self.rumble(motor);
+                    }
+                    ui.add_space(6.0);
+                }
+            });
+            if !can {
+                ui.label(egui::RichText::new(t("This controller doesn't support vibration here")).size(12.5).color(theme::TEXT_DIM));
+            }
+            if self.rumble_kind.is_some() {
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(t("Did you feel it vibrate?")).font(theme::bold(14.0)).color(Color32::WHITE));
+                    ui.add_space(8.0);
+                    let yes = self.rumble_felt == Some(true);
+                    let no = self.rumble_felt == Some(false);
+                    if theme::fancy_button(ui, t("Yes"), Vec2::new(80.0, 32.0), if yes { theme::ACCENT } else { theme::SILVER }, theme::STEEL, true).clicked() {
+                        self.rumble_felt = Some(true);
+                    }
+                    ui.add_space(6.0);
+                    if theme::fancy_button(ui, t("No"), Vec2::new(80.0, 32.0), if no { theme::ACCENT } else { theme::SILVER }, theme::STEEL, true).clicked() {
+                        self.rumble_felt = Some(false);
+                    }
+                    ui.add_space(10.0);
+                    match self.rumble_felt {
+                        Some(true) => {
+                            ui.label(egui::RichText::new(t("✔ Vibration works")).font(theme::bold(13.5)).color(Color32::WHITE));
+                        }
+                        Some(false) => {
+                            ui.label(egui::RichText::new(t("⚠ A motor may be broken or disconnected")).font(theme::bold(13.5)).color(theme::GLINT));
+                        }
+                        None => {}
+                    }
+                });
+            }
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new(t("Try each motor on its own: if one never vibrates, it's broken or unplugged inside the controller."))
+                    .size(12.0)
+                    .color(theme::TEXT_DIM),
             );
         });
     }
@@ -619,6 +946,56 @@ impl GamepadTest {
     }
 }
 
+/// A zoomed view of the middle of a stick's travel: rings at 5, 10 and 20%, the controller's
+/// own dead zone (dotted), recent positions as fading dots, the live position, and the
+/// measured rest position with a circle as big as its jitter.
+fn draw_rest_plot(p: &egui::Painter, rect: Rect, trail: &VecDeque<Vec2>, rest: Option<Rest>, deadzone: Option<f32>, live: Option<Vec2>) {
+    let c = rect.center();
+    let r = rect.width() / 2.0 - 4.0;
+    let at = |v: Vec2| {
+        let z = v / ZOOM;
+        c + if z.length() > 1.0 { z.normalized() } else { z } * r
+    };
+    p.circle_filled(c, r, Color32::from_rgba_unmultiplied(8, 8, 10, 230));
+    p.circle_stroke(c, r, Stroke::new(1.0, alpha(theme::LIGHT, 0.25)));
+    p.line_segment([c - Vec2::new(r, 0.0), c + Vec2::new(r, 0.0)], Stroke::new(1.0, alpha(theme::LIGHT, 0.08)));
+    p.line_segment([c - Vec2::new(0.0, r), c + Vec2::new(0.0, r)], Stroke::new(1.0, alpha(theme::LIGHT, 0.08)));
+    for (ring, label) in [(SLIGHT, "5%"), (DRIFT, "10%"), (0.20, "20%")] {
+        let rr = r * ring / ZOOM;
+        let strong = ring == DRIFT;
+        p.circle_stroke(c, rr, Stroke::new(if strong { 1.5 } else { 1.0 }, alpha(theme::LIGHT, if strong { 0.45 } else { 0.18 })));
+        p.text(c + Vec2::new(rr * 0.707 + 2.0, -rr * 0.707 - 2.0), Align2::LEFT_BOTTOM, label, egui::FontId::proportional(10.0), theme::TEXT_DIM);
+    }
+    if let Some(d) = deadzone.filter(|d| *d > 0.005 && *d < ZOOM) {
+        let rr = r * d / ZOOM;
+        for k in 0..48 {
+            let a = k as f32 / 48.0 * std::f32::consts::TAU;
+            p.circle_filled(c + Vec2::angled(a) * rr, 1.0, alpha(theme::SILVER, 0.6));
+        }
+    }
+    let n = trail.len().max(1) as f32;
+    for (i, v) in trail.iter().enumerate() {
+        p.circle_filled(at(*v), 2.0, alpha(Color32::WHITE, 0.08 + 0.4 * (i as f32 + 1.0) / n));
+    }
+    if let Some(rest) = rest {
+        let m = at(rest.offset);
+        let ring = (r * rest.spread / ZOOM).max(5.0);
+        let col = if rest.level() == Level::Drift { theme::GLINT } else { Color32::WHITE };
+        p.circle_stroke(m, ring, Stroke::new(1.5, alpha(col, 0.8)));
+        p.line_segment([m - Vec2::new(6.0, 0.0), m + Vec2::new(6.0, 0.0)], Stroke::new(2.0, col));
+        p.line_segment([m - Vec2::new(0.0, 6.0), m + Vec2::new(0.0, 6.0)], Stroke::new(2.0, col));
+    }
+    if let Some(v) = live {
+        let dot = at(v);
+        if (v / ZOOM).length() > 1.0 {
+            p.circle_stroke(dot, 5.0, Stroke::new(1.5, Color32::WHITE));
+        } else {
+            theme::glow(p, dot, 12.0, alpha(Color32::WHITE, 0.3));
+            p.circle_filled(dot, 4.5, Color32::WHITE);
+        }
+    }
+}
+
 fn chip(ui: &mut egui::Ui, label: &str, ok: bool) {
     egui::Frame::new()
         .fill(if ok { Color32::WHITE } else { alpha(theme::SILVER, 0.15) })
@@ -672,6 +1049,20 @@ mod tests {
             w.update(Vec2::new(0.18, 0.05), i as f64 * 0.016);
         }
         assert!(w.drift.is_some());
+    }
+
+    #[test]
+    fn rest_measurement_levels() {
+        let still = |x: f32, y: f32| -> Vec<Vec2> { (0..60).map(|i| Vec2::new(x, y) + Vec2::splat((i % 3) as f32 * 0.002)).collect() };
+        assert_eq!(analyse(&still(0.01, -0.02)).unwrap().level(), Level::Good);
+        assert_eq!(analyse(&still(0.06, 0.0)).unwrap().level(), Level::Slight);
+        assert_eq!(analyse(&still(0.09, 0.08)).unwrap().level(), Level::Drift);
+        let mut moved = still(0.0, 0.0);
+        moved.push(Vec2::new(0.9, 0.0));
+        assert_eq!(analyse(&moved).unwrap().level(), Level::Moved);
+        assert!(analyse(&still(0.0, 0.0)[..5]).is_none());
+        let r = analyse(&still(0.02, 0.0)).unwrap();
+        assert!(r.spread < 0.01);
     }
 
     #[test]
