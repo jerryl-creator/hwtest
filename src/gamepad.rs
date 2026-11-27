@@ -368,6 +368,10 @@ impl GamepadTest {
         let now = ui.input(|i| i.time);
         let pad = self.gilrs.as_ref().and_then(|g| self.active.and_then(|id| g.connected_gamepad(id)));
         let connected = pad.is_some();
+        if connected {
+            // Controllers are polled once per frame: keep frames coming so sticks feel live.
+            ui.ctx().request_repaint();
+        }
         let ff = pad.as_ref().is_some_and(|p| p.is_ff_supported());
         let pressed: HashSet<Button> = pad
             .as_ref()

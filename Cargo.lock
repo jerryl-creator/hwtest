@@ -2323,6 +2323,7 @@ dependencies = [
  "eframe",
  "gilrs",
  "image",
+ "memmap2",
  "nokhwa",
  "serde",
  "sys-locale",

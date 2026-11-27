@@ -278,6 +278,10 @@ impl SpeakerTest {
             (s.mode, s.current_freq, s.live.clone(), s.wave, s.volume)
         };
         let playing = mode != Mode::Off;
+        if playing {
+            // The waveform and sweep readout animate while a tone plays.
+            ui.ctx().request_repaint();
+        }
         match mode {
             Mode::Off => mascot.say(t("Turn your volume down a bit first, ne~ (・ω・)")),
             Mode::Sweep => mascot.say(t("Listen for buzzing or rattling~ (｀・ω・´)")),

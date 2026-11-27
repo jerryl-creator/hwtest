@@ -74,6 +74,8 @@ struct App {
     clear_armed_until: f64,
     /// When the results were last cleared (for the confirmation message).
     cleared_at: Option<f64>,
+    /// Each page's result, worked out once per frame (the sidebar and Home both show them).
+    statuses: Vec<(Tab, report::Status)>,
 }
 
 impl App {
@@ -116,6 +118,7 @@ impl App {
             ui_scale: saved.ui_scale,
             clear_armed_until: 0.0,
             cleared_at: None,
+            statuses: Vec::new(),
         };
         app.bg.enabled = !app.reduce_motion;
         if (app.ui_scale - 1.0).abs() > 0.01 {
@@ -290,7 +293,10 @@ impl eframe::App for App {
             self.pixels.fullscreen(ctx, ui);
             return;
         }
+        let perf_t0 = std::time::Instant::now();
+        self.refresh_statuses();
         self.bg.paint(ctx);
+        let perf_bg = perf_t0.elapsed();
 
         let compact = shell::is_compact(ctx);
         egui::Panel::left("nav")
@@ -384,7 +390,8 @@ impl eframe::App for App {
         for sound in self.keyboard.take_sounds() {
             self.speakers.play_sfx(sound);
         }
-        pace_frames(ctx);
+        perf_report(ctx, perf_bg, perf_t0.elapsed());
+        pace_frames(ctx, self.reduce_motion);
     }
 }
 
@@ -397,6 +404,26 @@ fn tab_for(step: quick::Step) -> Tab {
         quick::Step::Speakers | quick::Step::Microphone => Tab::Audio,
         quick::Step::Camera => Tab::Camera,
         quick::Step::Gamepad => Tab::Gamepad,
+    }
+}
+
+/// Dev: NYANSPECT_PERF prints, every 3 s, frames drawn and the average time spent in the
+/// background and in all of our UI code per frame (egui's tessellation and the GPU come after).
+fn perf_report(ctx: &egui::Context, bg: std::time::Duration, total: std::time::Duration) {
+    use std::sync::Mutex;
+    static ACC: Mutex<(u32, f64, f64, f64)> = Mutex::new((0, 0.0, 0.0, 0.0));
+    if std::env::var("NYANSPECT_PERF").is_err() {
+        return;
+    }
+    let now = ctx.input(|i| i.time);
+    let mut a = ACC.lock().unwrap();
+    a.0 += 1;
+    a.1 += bg.as_secs_f64();
+    a.2 += total.as_secs_f64();
+    if now - a.3 > 3.0 {
+        let n = a.0.max(1) as f64;
+        eprintln!("perf: {:.1} fps · bg {:.2} ms · ui total {:.2} ms per frame", a.0 as f64 / (now - a.3), a.1 / n * 1e3, a.2 / n * 1e3);
+        *a = (0, 0.0, 0.0, now);
     }
 }
 
@@ -415,11 +442,13 @@ fn page_appear(ctx: &egui::Context, page: u8) -> f32 {
     1.0 - (1.0 - t).powi(3)
 }
 
-/// Adaptive frame rate. The background always animates, but slowly, so:
-/// ~60 fps right after input (key pop-ups and sparkles need it), ~30 fps when idle,
-/// ~15 fps when the window is in the background, and nothing while minimised.
-/// Input itself always repaints immediately.
-fn pace_frames(ctx: &egui::Context) {
+/// Adaptive frame rate. Drawing a frame is the app's main cost (≈0.4% of a CPU core per
+/// frame-per-second on a typical laptop), and the background only drifts slowly, so:
+/// 60 fps right after input (key pop-ups and sparkles need it), 24 fps for the first
+/// 10 s of idle, then 12 fps; 8 fps when the window is in the background; 4 fps with
+/// "Reduce motion" on; nothing while minimised. Input always repaints immediately, and
+/// live pages (camera, mic, playing tones, a connected controller) ask for full speed.
+fn pace_frames(ctx: &egui::Context, reduce_motion: bool) {
     let (minimized, focused, now, had_input) = ctx.input(|i| {
         let vp = i.viewport();
         let input = !i.events.is_empty() || i.pointer.is_moving() || i.pointer.any_down();
@@ -433,10 +462,17 @@ fn pace_frames(ctx: &egui::Context) {
         ctx.data_mut(|d| d.insert_temp(key, now));
     }
     let last = ctx.data(|d| d.get_temp::<f64>(key)).unwrap_or(now);
-    let fps = match (focused, now - last < 1.5) {
-        (false, _) => 15.0,
-        (true, true) => 60.0,
-        (true, false) => 30.0,
+    let quiet = now - last;
+    let fps = if quiet < 1.5 {
+        60.0
+    } else if !focused {
+        8.0
+    } else if reduce_motion {
+        4.0
+    } else if quiet < 10.0 {
+        24.0
+    } else {
+        12.0
     };
     ctx.request_repaint_after(std::time::Duration::from_secs_f32(1.0 / fps));
 }

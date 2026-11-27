@@ -57,8 +57,18 @@ fn status_text(status: Status) -> &'static str {
 }
 
 impl App {
-    /// A page's combined result (Audio = speakers + microphone). None for pages that aren't tests.
+    /// Work out every test page's result once for this frame.
+    pub(crate) fn refresh_statuses(&mut self) {
+        let tabs = [Tab::Keyboard, Tab::Mouse, Tab::Gamepad, Tab::Display, Tab::Audio, Tab::Camera];
+        self.statuses = tabs.iter().filter_map(|t| self.compute_status(*t).map(|s| (*t, s))).collect();
+    }
+
+    /// A page's result this frame (Audio = speakers + microphone). None for pages that aren't tests.
     pub(crate) fn tab_status(&self, tab: Tab) -> Option<Status> {
+        self.statuses.iter().find(|(t, _)| *t == tab).map(|(_, s)| *s)
+    }
+
+    fn compute_status(&self, tab: Tab) -> Option<Status> {
         Some(match tab {
             Tab::Keyboard => self.keyboard.report().status,
             Tab::Mouse => self.mouse.report().status,

@@ -49,7 +49,20 @@ fn font_bytes(path: &str) -> Option<&'static [u8]> {
     use std::sync::Mutex;
     static CACHE: OnceLock<Mutex<HashMap<String, Option<&'static [u8]>>>> = OnceLock::new();
     let mut cache = CACHE.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
-    *cache.entry(path.to_string()).or_insert_with(|| std::fs::read(path).ok().map(|b| &*Box::leak(b.into_boxed_slice())))
+    *cache.entry(path.to_string()).or_insert_with(|| map_font(path))
+}
+
+/// Memory-map a font file instead of reading it: the OS then loads only the parts actually
+/// used (a few MB of a ~20 MB CJK font) and can share them with other apps. Falls back to
+/// reading the file if mapping fails.
+fn map_font(path: &str) -> Option<&'static [u8]> {
+    let file = std::fs::File::open(path).ok()?;
+    // SAFETY: system font files aren't modified while apps use them; the map lives for the
+    // rest of the program (leaked on purpose, like the fonts themselves).
+    match unsafe { memmap2::Mmap::map(&file) } {
+        Ok(map) => Some(&**Box::leak(Box::new(map))),
+        Err(_) => std::fs::read(path).ok().map(|b| &*Box::leak(b.into_boxed_slice())),
+    }
 }
 
 /// The first font that exists: (bytes, face index inside a .ttc collection).
@@ -519,7 +532,8 @@ pub struct Background {
     stars: Vec<(f32, f32, f32, f32)>, // x, y (0..1), phase, speed
     rng: u32,
     pub enabled: bool,
-    tone: Option<(Rect, std::sync::Arc<Mesh>)>,
+    /// The screentone picture and the window size / scale it was drawn for.
+    tone: Option<(Rect, f32, egui::TextureHandle)>,
 }
 
 impl Background {
@@ -579,11 +593,13 @@ impl Background {
 
         // manga screentone: halftone dots fading out from two corners.
         // Built once per window size and reused, so it costs almost nothing per frame.
-        if self.tone.as_ref().is_none_or(|(r, _)| *r != screen) {
-            self.tone = Some((screen, std::sync::Arc::new(screentone_mesh(screen))));
+        let ppp = ctx.pixels_per_point();
+        if self.tone.as_ref().is_none_or(|(r, s, _)| *r != screen || *s != ppp) {
+            let img = screentone_image(screen, ppp);
+            self.tone = Some((screen, ppp, ctx.load_texture("screentone", img, egui::TextureOptions::NEAREST)));
         }
-        if let Some((_, mesh)) = &self.tone {
-            p.add(Shape::mesh(mesh.clone()));
+        if let Some((_, _, tex)) = &self.tone {
+            p.image(tex.id(), screen, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
         }
 
         // twinkling stars
@@ -623,9 +639,11 @@ impl Background {
     }
 }
 
-fn screentone_mesh(screen: Rect) -> Mesh {
-    let mut mesh = Mesh::default();
-    let color = alpha(Color32::WHITE, 0.07);
+/// Manga screentone: halftone dots fading out from two corners, drawn once into an image
+/// (in physical pixels) so each frame draws one picture instead of ~35,000 vertices.
+fn screentone_image(screen: Rect, ppp: f32) -> egui::ColorImage {
+    let (w, h) = ((screen.width() * ppp).round().max(1.0) as usize, (screen.height() * ppp).round().max(1.0) as usize);
+    let mut img = egui::ColorImage::filled([w, h], Color32::TRANSPARENT);
     let spacing = 13.0;
     let reach = screen.width().max(screen.height()) * 0.42;
     let corners = [screen.left_bottom(), screen.right_top()];
@@ -637,15 +655,19 @@ fn screentone_mesh(screen: Rect) -> Mesh {
             let pt = Pos2::new(x, y);
             let k = corners.iter().map(|c| 1.0 - c.distance(pt) / reach).fold(0.0f32, f32::max);
             if k > 0.05 {
-                // small hexagon dot
-                let r = 0.4 + k * 2.6;
-                let base = mesh.vertices.len() as u32;
-                mesh.colored_vertex(pt, color);
-                for i in 0..6 {
-                    mesh.colored_vertex(pt + Vec2::angled(i as f32 * TAU / 6.0) * r, color);
-                }
-                for i in 0..6u32 {
-                    mesh.add_triangle(base, base + 1 + i, base + 1 + (i + 1) % 6);
+                // Anti-aliased round dot.
+                let r = (0.4 + k * 2.6) * ppp;
+                let (cx, cy) = ((pt.x - screen.left()) * ppp, (pt.y - screen.top()) * ppp);
+                let (x0, x1) = ((cx - r - 1.0).floor().max(0.0) as usize, ((cx + r + 1.0).ceil() as usize).min(w));
+                let (y0, y1) = ((cy - r - 1.0).floor().max(0.0) as usize, ((cy + r + 1.0).ceil() as usize).min(h));
+                for py in y0..y1 {
+                    for px in x0..x1 {
+                        let d = ((px as f32 + 0.5 - cx).powi(2) + (py as f32 + 0.5 - cy).powi(2)).sqrt();
+                        let cover = (r - d + 0.5).clamp(0.0, 1.0);
+                        if cover > 0.0 {
+                            img.pixels[py * w + px] = Color32::from_white_alpha((0.07 * 255.0 * cover) as u8);
+                        }
+                    }
                 }
             }
             x += spacing;
@@ -653,7 +675,7 @@ fn screentone_mesh(screen: Rect) -> Mesh {
         y += spacing * 0.87;
         row += 1;
     }
-    mesh
+    img
 }
 
 fn draw_petal(p: &egui::Painter, c: Pos2, size: f32, rot: f32, squash: f32) {
