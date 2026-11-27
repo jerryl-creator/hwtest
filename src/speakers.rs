@@ -214,6 +214,13 @@ impl SpeakerTest {
         self.shared.lock().map(|s| s.clip_pos < s.clip.len()).unwrap_or(false)
     }
 
+    /// Forget which speakers were heard.
+    pub fn clear_results(&mut self) {
+        self.stop();
+        self.heard = vec![None; self.channels];
+        self.played = vec![false; self.channels];
+    }
+
     pub fn report(&self) -> crate::report::Section {
         use crate::report::{Section, Status};
         if let Some(e) = &self.error {

@@ -206,6 +206,13 @@ impl CameraTest {
         self.running() && self.frame_info.is_some() && now - self.last_light.unwrap_or(self.started_at) > DARK_SECS
     }
 
+    /// Forget what the camera test found.
+    pub fn clear_results(&mut self) {
+        self.stop();
+        self.summary = None;
+        self.error = None;
+    }
+
     pub fn report(&self) -> crate::report::Section {
         use crate::report::{Section, Status};
         let mut lines = Vec::new();
@@ -242,7 +249,7 @@ impl CameraTest {
         Section { title: "Camera", jp: "カメラ", status, lines }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, cjk: bool) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, _cjk: bool) {
         let ctx = ui.ctx().clone();
         let now = ui.input(|i| i.time);
         if self.cams.is_none() {
@@ -274,7 +281,6 @@ impl CameraTest {
 
         theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
-                theme::card_title(ui, "Camera", "カメラ", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (label, c1, c2) = if self.running() {
                         (t("■  Stop camera"), theme::LIGHT, theme::STEEL)

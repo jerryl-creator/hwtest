@@ -364,7 +364,7 @@ impl GamepadTest {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, cjk: bool) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, _cjk: bool) {
         let now = ui.input(|i| i.time);
         let pad = self.gilrs.as_ref().and_then(|g| self.active.and_then(|id| g.connected_gamepad(id)));
         let connected = pad.is_some();
@@ -392,7 +392,6 @@ impl GamepadTest {
 
         theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
-                theme::card_title(ui, "Gamepad", "ゲームパッド", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if theme::fancy_button(ui, t("↺ Reset"), Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
                         self.reset();

@@ -70,6 +70,15 @@ impl MicTest {
         self.stream.is_some()
     }
 
+    /// Forget levels and the playback answer.
+    pub fn clear_results(&mut self) {
+        self.stop();
+        self.max_db = None;
+        self.playback_ok = None;
+        self.signal_seen = false;
+        self.error = None;
+    }
+
     pub fn report(&self) -> crate::report::Section {
         use crate::report::{Section, Status};
         let started = !self.device_name.is_empty() || self.error.is_some();

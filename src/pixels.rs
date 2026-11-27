@@ -145,8 +145,6 @@ impl PixelTest {
 
         theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
-                theme::card_title(ui, "Display test", "ディスプレイチェック", cjk);
-                ui.add_space(12.0);
                 let opts: Vec<_> = Mode::ALL.iter().map(|m| (*m, t(m.label()), t(m.hint()))).collect();
                 if theme::segmented(ui, "disp-mode", &opts, &mut self.mode) {
                     self.index = 0;
@@ -276,6 +274,12 @@ impl PixelTest {
                 });
             });
         }
+    }
+
+    /// Forget marks and which tests were run.
+    pub fn clear_results(&mut self) {
+        self.marks.clear();
+        self.done_modes.clear();
     }
 
     pub fn report(&self) -> crate::report::Section {

@@ -37,16 +37,16 @@ enum Tab {
 }
 
 /// Pages: (page, icon, English name, Japanese name). Settings sits at the bottom of the sidebar.
-const TABS: &[(Tab, &str, &str, &str)] = &[
-    (Tab::Home, "⌂", "Home", "ホーム"),
-    (Tab::Keyboard, "⌨", "Keyboard", "キーボード"),
-    (Tab::Mouse, "🖱", "Mouse", "マウス"),
-    (Tab::Gamepad, "🎮", "Gamepad", "ゲームパッド"),
-    (Tab::Display, "★", "Display", "ディスプレイ"),
-    (Tab::Audio, "🔊", "Audio", "オーディオ"),
-    (Tab::Camera, "📷", "Camera", "カメラ"),
-    (Tab::Report, "📋", "Report", "レポート"),
-    (Tab::Settings, "⚙", "Settings", "設定"),
+const TABS: &[(Tab, theme::Icon, &str, &str)] = &[
+    (Tab::Home, theme::Icon::Home, "Home", "ホーム"),
+    (Tab::Keyboard, theme::Icon::Keyboard, "Keyboard", "キーボード"),
+    (Tab::Mouse, theme::Icon::Mouse, "Mouse", "マウス"),
+    (Tab::Gamepad, theme::Icon::Gamepad, "Gamepad", "ゲームパッド"),
+    (Tab::Display, theme::Icon::Display, "Display", "ディスプレイ"),
+    (Tab::Audio, theme::Icon::Audio, "Audio", "オーディオ"),
+    (Tab::Camera, theme::Icon::Camera, "Camera", "カメラ"),
+    (Tab::Report, theme::Icon::Report, "Report", "レポート"),
+    (Tab::Settings, theme::Icon::Settings, "Settings", "設定"),
 ];
 
 struct App {
@@ -70,6 +70,10 @@ struct App {
     ui_scale: f32,
     /// The language the user picked (None = follow the system).
     lang_choice: Option<i18n::Lang>,
+    /// "Clear all results" asks for a second click until this time.
+    clear_armed_until: f64,
+    /// When the results were last cleared (for the confirmation message).
+    cleared_at: Option<f64>,
 }
 
 impl App {
@@ -110,6 +114,8 @@ impl App {
             reduce_motion: saved.reduce_motion,
             show_mascot: saved.show_mascot,
             ui_scale: saved.ui_scale,
+            clear_armed_until: 0.0,
+            cleared_at: None,
         };
         app.bg.enabled = !app.reduce_motion;
         if (app.ui_scale - 1.0).abs() > 0.01 {

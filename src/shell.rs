@@ -78,6 +78,19 @@ impl App {
         })
     }
 
+    /// Start fresh: forget every test result (settings stay).
+    pub(crate) fn clear_all_results(&mut self) {
+        self.keyboard.reset();
+        self.mouse.reset();
+        self.gamepad.reset();
+        self.pixels.clear_results();
+        self.speakers.clear_results();
+        self.mic.clear_results();
+        self.camera.clear_results();
+        self.report.quick_done = None;
+        self.quick = None;
+    }
+
     pub(crate) fn start_quick_check(&mut self) {
         self.quick = Some(crate::quick::QuickCheck::new());
         self.report.quick_done = None;
@@ -132,25 +145,25 @@ impl App {
             if *tab == Tab::Report {
                 ui.add_space(8.0);
             }
-            self.nav_row(ui, *tab, icon, name, compact);
+            self.nav_row(ui, *tab, *icon, name, compact);
         }
 
         // Settings and language at the bottom.
         let bottom = ui.available_height() - if compact { 96.0 } else { 52.0 };
         ui.add_space(bottom.max(10.0));
         if compact {
-            self.nav_row(ui, Tab::Settings, "⚙", "Settings", true);
+            self.nav_row(ui, Tab::Settings, theme::Icon::Settings, "Settings", true);
             ui.vertical_centered(|ui| self.language_button(ui, true));
         } else {
             ui.horizontal(|ui| {
                 let row_w = ui.available_width() - 76.0;
-                ui.allocate_ui(Vec2::new(row_w, 42.0), |ui| self.nav_row(ui, Tab::Settings, "⚙", "Settings", false));
+                ui.allocate_ui(Vec2::new(row_w, 42.0), |ui| self.nav_row(ui, Tab::Settings, theme::Icon::Settings, "Settings", false));
                 self.language_button(ui, false);
             });
         }
     }
 
-    fn nav_row(&mut self, ui: &mut egui::Ui, tab: Tab, icon: &str, name: &str, compact: bool) {
+    fn nav_row(&mut self, ui: &mut egui::Ui, tab: Tab, icon: theme::Icon, name: &str, compact: bool) {
         let w = ui.available_width();
         let (r, resp) = ui.allocate_exact_size(Vec2::new(w, 40.0), Sense::CLICK);
         let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
@@ -173,13 +186,13 @@ impl App {
         let col = lerp_color(lerp_color(theme::TEXT_DIM, theme::TEXT, hover), theme::INK, on);
         let status = self.tab_status(tab);
         if compact {
-            p.text(pill.center(), Align2::CENTER_CENTER, icon, theme::bold(17.0), col);
+            theme::icon(p, icon, pill.center(), 22.0, col);
             if let Some(s) = status {
                 status_mark(p, pill.right_top() + Vec2::new(-8.0, 8.0), s);
             }
         } else {
-            p.text(pill.left_center() + Vec2::new(16.0, 0.0), Align2::CENTER_CENTER, icon, theme::bold(15.0), col);
-            p.text(pill.left_center() + Vec2::new(34.0, 0.0), Align2::LEFT_CENTER, t(name), theme::bold(14.5), col);
+            theme::icon(p, icon, pill.left_center() + Vec2::new(18.0, 0.0), 19.0, col);
+            p.text(pill.left_center() + Vec2::new(38.0, 0.0), Align2::LEFT_CENTER, t(name), theme::bold(14.5), col);
             if let Some(s) = status {
                 status_mark(p, pill.right_center() + Vec2::new(-16.0, 0.0), s);
             }
@@ -250,7 +263,7 @@ impl App {
                                 }
                             }
                             ui.add_space(8.0);
-                            if outline_button(ui, t("📋 View report")).clicked() {
+                            if outline_button(ui, t("View report")).clicked() {
                                 self.tab = Tab::Report;
                             }
                         });
@@ -340,7 +353,7 @@ impl App {
         let ic = r.left_top() + Vec2::new(40.0, 42.0);
         p.circle_filled(ic, 22.0, Color32::from_rgb(38, 38, 42));
         p.circle_stroke(ic, 22.0, Stroke::new(1.0, alpha(theme::LIGHT, 0.25)));
-        p.text(ic, Align2::CENTER_CENTER, icon, theme::bold(20.0), Color32::WHITE);
+        theme::icon(p, icon, ic, 24.0, Color32::WHITE);
         let title = p.text(r.left_top() + Vec2::new(74.0, 32.0), Align2::LEFT_CENTER, t(name), theme::bold(18.0), Color32::WHITE);
         if self.cjk {
             p.text(
@@ -384,6 +397,34 @@ impl App {
                 }
                 ui.add_space(4.0);
                 ui.label(egui::RichText::new(t("Until you pick one, Nyanspect follows your system language.")).size(12.5).color(theme::TEXT_DIM));
+            });
+            cols[0].add_space(14.0);
+            theme::card().show(&mut cols[0], |ui| {
+                ui.set_min_width(ui.available_width());
+                theme::card_title(ui, "Test results", "結果", self.cjk);
+                let now = ui.input(|i| i.time);
+                let armed = now < self.clear_armed_until;
+                let label = if armed { t("Click again to clear everything") } else { t("Clear all test results") };
+                let (c1, c2) = if armed { (theme::ACCENT, theme::SILVER) } else { (theme::SILVER, theme::STEEL) };
+                if theme::fancy_button(ui, label, Vec2::new(220.0, 36.0), c1, c2, true).clicked() {
+                    if armed {
+                        self.clear_all_results();
+                        self.clear_armed_until = 0.0;
+                        self.cleared_at = Some(now);
+                    } else {
+                        self.clear_armed_until = now + 4.0;
+                    }
+                }
+                if armed {
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+                }
+                ui.add_space(4.0);
+                let note = if self.cleared_at.is_some_and(|at| now - at < 5.0) {
+                    t("✔ All results cleared. Ready for the next computer!")
+                } else {
+                    t("Start fresh, for example before testing another computer. Your settings stay.")
+                };
+                ui.label(egui::RichText::new(note).size(12.5).color(theme::TEXT_DIM));
             });
             cols[0].add_space(14.0);
             theme::card().show(&mut cols[0], |ui| {

@@ -201,7 +201,7 @@ impl MouseTest {
         *self = Self { fit_height: self.fit_height, ..Self::default() };
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, cjk: bool) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, mascot: &mut Mascot, _cjk: bool) {
         self.handle_input(ui.ctx());
         let now = ui.input(|i| i.time);
         let n_tested = self.tested.iter().filter(|t| **t).count();
@@ -234,7 +234,6 @@ impl MouseTest {
 
         theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
-                theme::card_title(ui, "Mouse & touchpad", "マウス", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if theme::fancy_button(ui, t("↺ Reset"), Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
                         self.reset();

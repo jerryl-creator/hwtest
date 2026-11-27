@@ -320,6 +320,109 @@ pub fn fancy_button(ui: &mut Ui, label: &str, size: Vec2, c1: Color32, c2: Color
     }
 }
 
+/// Simple monochrome line icons, drawn by the app so they look the same on every system
+/// (emoji icons vary between fonts and some render as blobs at small sizes).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Icon {
+    Home,
+    Keyboard,
+    Mouse,
+    Gamepad,
+    Display,
+    Audio,
+    Camera,
+    Report,
+    Settings,
+}
+
+/// Draw `kind` centred on `c`, `size` points across (designed on a 24×24 grid).
+pub fn icon(p: &egui::Painter, kind: Icon, c: Pos2, size: f32, col: Color32) {
+    let u = size / 24.0;
+    let pt = |x: f32, y: f32| c + Vec2::new(x * u, y * u);
+    let st = Stroke::new((1.8 * u).max(1.2), col);
+    let rect = |x0: f32, y0: f32, x1: f32, y1: f32| Rect::from_min_max(pt(x0, y0), pt(x1, y1));
+    let frame = |r: Rect, radius: f32| {
+        p.rect_stroke(r, radius * u, st, StrokeKind::Middle);
+    };
+    let line = |pts: &[(f32, f32)]| {
+        p.add(Shape::line(pts.iter().map(|(x, y)| pt(*x, *y)).collect(), st));
+    };
+    let arc = |r: f32, from: f32, to: f32| {
+        let pts: Vec<Pos2> = (0..=12)
+            .map(|k| {
+                let a = (from + (to - from) * k as f32 / 12.0).to_radians();
+                pt(-1.0, 0.0) + Vec2::new(a.cos(), a.sin()) * r * u
+            })
+            .collect();
+        p.add(Shape::line(pts, st));
+    };
+    let dot = |x: f32, y: f32, r: f32| {
+        p.circle_filled(pt(x, y), r * u, col);
+    };
+    match kind {
+        Icon::Home => {
+            line(&[(-10.0, 0.0), (0.0, -9.0), (10.0, 0.0)]);
+            frame(rect(-6.5, -2.5, 6.5, 9.0), 1.5);
+            frame(rect(-2.0, 3.0, 2.0, 9.0), 0.5);
+        }
+        Icon::Keyboard => {
+            frame(rect(-11.0, -7.0, 11.0, 7.0), 2.5);
+            for y in [-3.0, 0.5] {
+                for k in 0..5 {
+                    dot(-7.0 + k as f32 * 3.5, y, 1.1);
+                }
+            }
+            line(&[(-5.0, 4.0), (5.0, 4.0)]);
+        }
+        Icon::Mouse => {
+            frame(rect(-6.5, -10.0, 6.5, 10.0), 6.5);
+            line(&[(-6.5, -2.0), (6.5, -2.0)]);
+            line(&[(0.0, -10.0), (0.0, -2.0)]);
+        }
+        Icon::Gamepad => {
+            frame(rect(-11.5, -6.5, 11.5, 6.5), 6.5);
+            line(&[(-8.0, 0.0), (-3.0, 0.0)]);
+            line(&[(-5.5, -2.5), (-5.5, 2.5)]);
+            dot(4.5, -1.5, 1.4);
+            dot(7.5, 1.5, 1.4);
+        }
+        Icon::Display => {
+            frame(rect(-11.0, -8.0, 11.0, 5.0), 1.5);
+            line(&[(0.0, 5.0), (0.0, 9.0)]);
+            line(&[(-5.0, 9.0), (5.0, 9.0)]);
+        }
+        Icon::Audio => {
+            let body: Vec<Pos2> =
+                [(-11.0, -3.5), (-7.0, -3.5), (-2.0, -8.5), (-2.0, 8.5), (-7.0, 3.5), (-11.0, 3.5)].iter().map(|(x, y)| pt(*x, *y)).collect();
+            p.add(Shape::closed_line(body, st));
+            arc(5.5, -45.0, 45.0);
+            arc(10.0, -45.0, 45.0);
+        }
+        Icon::Camera => {
+            frame(rect(-11.0, -5.5, 11.0, 8.5), 2.5);
+            line(&[(-5.0, -5.5), (-3.0, -8.5), (3.0, -8.5), (5.0, -5.5)]);
+            p.circle_stroke(pt(0.0, 1.5), 4.2 * u, st);
+            dot(7.5, -2.5, 1.0);
+        }
+        Icon::Report => {
+            frame(rect(-7.5, -8.5, 7.5, 10.5), 1.5);
+            frame(rect(-3.5, -11.0, 3.5, -7.0), 1.0);
+            line(&[(-4.0, -2.0), (4.0, -2.0)]);
+            line(&[(-4.0, 2.0), (4.0, 2.0)]);
+            line(&[(-4.0, 6.0), (1.0, 6.0)]);
+        }
+        Icon::Settings => {
+            p.circle_stroke(c, 6.0 * u, st);
+            p.circle_stroke(c, 2.3 * u, st);
+            for k in 0..8 {
+                let a = (k as f32 * 45.0).to_radians();
+                let d = Vec2::new(a.cos(), a.sin());
+                p.line_segment([c + d * 6.0 * u, c + d * 9.5 * u], Stroke::new(st.width * 1.6, col));
+            }
+        }
+    }
+}
+
 /// An on/off switch with a bold label and a dim hint underneath. Never takes keyboard focus.
 /// Returns true when it was flipped.
 pub fn toggle(ui: &mut Ui, on: &mut bool, label: &str, hint: &str) -> bool {

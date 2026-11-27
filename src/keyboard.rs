@@ -111,6 +111,16 @@ impl KeyboardTest {
         }
     }
 
+    /// Forget every key tested (keeps the layout and sound settings).
+    pub fn reset(&mut self) {
+        self.tested.clear();
+        self.log.clear();
+        self.chatter.clear();
+        self.chatter_at.clear();
+        self.max_held = 0;
+        self.celebrated = false;
+    }
+
     pub fn report(&self) -> crate::report::Section {
         use crate::report::{Section, Status};
         let total = self.layout.caps.len();
@@ -221,15 +231,9 @@ impl KeyboardTest {
         }
         let card = theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
-                theme::card_title(ui, "Keyboard test", "キーボードテスト", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if theme::fancy_button(ui, t("↺ Reset"), Vec2::new(100.0, 32.0), theme::SILVER, theme::STEEL, true).clicked() {
-                        self.tested.clear();
-                        self.log.clear();
-                        self.chatter.clear();
-                        self.chatter_at.clear();
-                        self.max_held = 0;
-                        self.celebrated = false;
+                        self.reset();
                     }
                     ui.add_space(6.0);
                     let label = if self.sfx.enabled { t("★ SFX: ON") } else { t("SFX: OFF") };

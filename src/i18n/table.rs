@@ -1,7 +1,7 @@
 //! Translations: one row per English string, columns [English, 简体中文, Bahasa Melayu, 日本語].
 //! `{0}`, `{1}`… are values filled in at run time and may be reordered.
 
-pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK, SHELL];
+pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK, SHELL, POLISH];
 
 const MAIN: &[[&str; 4]] = &[
     ["Keyboard", "键盘", "Papan Kekunci", "キーボード"],
@@ -408,7 +408,7 @@ const SHELL: &[[&str; 4]] = &[
     ["Check your keyboard, mouse, screen, speakers, microphone, camera and controller in a few minutes. Not sure where to start? The quick check walks you through everything.", "几分钟内检查你的键盘、鼠标、屏幕、扬声器、麦克风、摄像头和手柄。不知道从哪里开始？快速检测会一步步带你完成。", "Periksa papan kekunci, tetikus, skrin, pembesar suara, mikrofon, kamera dan pengawal anda dalam beberapa minit. Tidak pasti di mana hendak bermula? Semakan pantas akan membimbing anda melalui semuanya.", "キーボード、マウス、画面、スピーカー、マイク、カメラ、コントローラーを数分でチェック。どこから始めればいいか迷ったら、クイックチェックが全部案内します。"],
     ["▶ Continue quick check", "▶ 继续快速检测", "▶ Teruskan semakan pantas", "▶ クイックチェックを続ける"],
     ["▶ Start quick check", "▶ 开始快速检测", "▶ Mula semakan pantas", "▶ クイックチェック開始"],
-    ["📋 View report", "📋 查看报告", "📋 Lihat laporan", "📋 レポートを見る"],
+    ["View report", "查看报告", "Lihat laporan", "レポートを見る"],
     ["This computer", "这台电脑", "Komputer ini", "このコンピューター"],
     ["System", "系统", "Sistem", "システム"],
     ["Graphics", "显卡", "Grafik", "グラフィックス"],
@@ -441,4 +441,12 @@ const SHELL: &[[&str; 4]] = &[
     ["About", "关于", "Perihal", "情報"],
     ["Nyanspect {0} · free and open source (MIT)", "Nyanspect {0} · 免费开源（MIT）", "Nyanspect {0} · percuma dan sumber terbuka (MIT)", "Nyanspect {0} · 無料のオープンソース（MIT）"],
     ["Settings are saved automatically. Nothing you test ever leaves this computer.", "设置会自动保存。你测试的任何内容都不会离开这台电脑。", "Tetapan disimpan secara automatik. Tiada apa yang anda uji akan keluar dari komputer ini.", "設定は自動で保存されます。テスト内容がこのコンピューターの外に送られることはありません。"],
+];
+
+const POLISH: &[[&str; 4]] = &[
+    ["Test results", "测试结果", "Keputusan ujian", "テスト結果"],
+    ["Clear all test results", "清除所有测试结果", "Padam semua keputusan ujian", "すべてのテスト結果を消去"],
+    ["Click again to clear everything", "再点一次以全部清除", "Klik sekali lagi untuk padam semua", "もう一度クリックで全部消去"],
+    ["✔ All results cleared. Ready for the next computer!", "✔ 所有结果已清除。可以测试下一台电脑了！", "✔ Semua keputusan dipadam. Sedia untuk komputer seterusnya!", "✔ すべての結果を消去しました。次のコンピューターの準備OK！"],
+    ["Start fresh, for example before testing another computer. Your settings stay.", "重新开始，例如在测试另一台电脑之前。你的设置会保留。", "Mula semula, contohnya sebelum menguji komputer lain. Tetapan anda kekal.", "やり直したいとき（別のコンピューターをテストする前など）に。設定はそのまま残ります。"],
 ];

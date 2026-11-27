@@ -121,7 +121,6 @@ impl ReportTab {
 
         theme::card().show(ui, |ui| {
             ui.horizontal(|ui| {
-                theme::card_title(ui, "Report", "レポート", cjk);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let b = Vec2::new(150.0, 34.0);
                     if theme::fancy_button(ui, t("Save as image"), b, theme::SILVER, theme::STEEL, true).clicked() {
