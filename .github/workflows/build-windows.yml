@@ -25,7 +25,7 @@ jobs:
     name: Windows x64 (cross-compiled)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust (rustup) with the Windows target
         run: |
@@ -36,7 +36,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
 
       - name: Cache Cargo downloads and build output
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -48,7 +48,7 @@ jobs:
       - name: Build
         run: ./build-windows.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nyanspect-windows
           path: dist/nyanspect.exe
@@ -66,7 +66,7 @@ jobs:
       CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
       CARGO_PROFILE_RELEASE_STRIP: 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust (rustup)
         run: |
@@ -82,7 +82,7 @@ jobs:
           rustc --version --verbose
 
       - name: Cache Cargo downloads and build output
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -97,7 +97,7 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item "target/$env:TARGET/release/nyanspect.exe" dist/nyanspect-arm64.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nyanspect-windows-arm64
           path: dist/nyanspect-arm64.exe
@@ -115,7 +115,7 @@ jobs:
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust (rustup)
         run: |
@@ -132,7 +132,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev libclang-dev linux-libc-dev pkg-config
 
       - name: Cache Cargo downloads and build output
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -149,7 +149,7 @@ jobs:
       - name: Build and package
         run: ./package-linux.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nyanspect-linux-${{ matrix.arch }}
           path: dist/nyanspect-linux-${{ matrix.arch }}.tar.gz
@@ -163,7 +163,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: nyanspect-*
           path: dist
