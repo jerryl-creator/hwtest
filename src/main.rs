@@ -524,6 +524,26 @@ fn pick_adapter(adapters: &[wgpu::Adapter], surface: Option<&wgpu::Surface<'_>>)
         .ok_or_else(|| "no GPU adapter can draw to this window".to_string())?;
     let info = best.get_info();
     let _ = RENDERER_INFO.set(format!("{} · {:?}", info.name, info.backend));
+    // Remember every GPU for the System page.
+    let seen: Vec<system::AdapterSeen> = adapters
+        .iter()
+        .map(|a| {
+            let i = a.get_info();
+            system::AdapterSeen {
+                name: i.name,
+                vendor: i.vendor,
+                device: i.device,
+                kind: match i.device_type {
+                    DeviceType::IntegratedGpu => Some(system::GpuKind::Integrated),
+                    DeviceType::DiscreteGpu => Some(system::GpuKind::Discrete),
+                    DeviceType::VirtualGpu | DeviceType::Other => Some(system::GpuKind::Other),
+                    DeviceType::Cpu => None,
+                },
+                gl: i.backend == Backend::Gl,
+            }
+        })
+        .collect();
+    let _ = system::GPUS.set(system::unique_gpus(&seen));
     Ok(best)
 }
 

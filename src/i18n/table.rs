@@ -563,4 +563,8 @@ const DRIFT: &[[&str; 4]] = &[
     ["stops at {0}% (battery-care setting)", "充到 {0}% 停止（电池保护设置）", "berhenti pada {0}% (tetapan penjagaan bateri)", "{0}% で充電停止（バッテリー保護設定）"],
     ["{0} min", "{0} 分钟", "{0} min", "{0} 分"],
     ["{0} h {1} min", "{0} 小时 {1} 分钟", "{0} j {1} min", "{0} 時間 {1} 分"],
+    ["GPU", "显卡", "GPU", "GPU"],
+    ["Integrated GPU", "集成显卡", "GPU bersepadu", "内蔵GPU"],
+    ["Discrete GPU", "独立显卡", "GPU diskret", "専用GPU"],
+    ["{0} GPU (no driver loaded)", "{0} 显卡（未加载驱动）", "GPU {0} (tiada pemacu dimuatkan)", "{0} GPU（ドライバー未読み込み）"],
 ];

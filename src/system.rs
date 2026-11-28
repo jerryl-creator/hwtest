@@ -77,6 +77,119 @@ impl Battery {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GpuKind {
+    Integrated,
+    Discrete,
+    Other,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Gpu {
+    pub name: String,
+    pub kind: GpuKind,
+}
+
+/// Every GPU the graphics library found at startup (filled in while the app picks one to draw with).
+pub static GPUS: std::sync::OnceLock<Vec<Gpu>> = std::sync::OnceLock::new();
+
+/// One adapter as the graphics library reports it: name, PCI vendor and device IDs, kind,
+/// and whether it's the OpenGL backend (whose names and IDs are less reliable).
+pub struct AdapterSeen {
+    pub name: String,
+    pub vendor: u32,
+    pub device: u32,
+    pub kind: Option<GpuKind>,
+    pub gl: bool,
+}
+
+/// The same GPU shows up once per graphics API (Vulkan, OpenGL, DirectX…): keep one entry each,
+/// preferring the non-OpenGL name. Software renderers (kind None) are left out.
+pub fn unique_gpus(seen: &[AdapterSeen]) -> Vec<Gpu> {
+    let mut out: Vec<(u32, u32, Gpu)> = Vec::new();
+    let mut ordered: Vec<&AdapterSeen> = seen.iter().filter(|a| a.kind.is_some()).collect();
+    ordered.sort_by_key(|a| a.gl);
+    for a in ordered {
+        let same = |(v, d, g): &(u32, u32, Gpu)| {
+            if a.vendor != 0 && *v != 0 {
+                *v == a.vendor && (a.device == 0 || *d == 0 || *d == a.device)
+            } else {
+                g.name == a.name
+            }
+        };
+        if !out.iter().any(same) {
+            let name = a.name.replace("(R)", "").replace("(TM)", "").split_whitespace().collect::<Vec<_>>().join(" ");
+            out.push((a.vendor, a.device, Gpu { name, kind: a.kind.unwrap_or(GpuKind::Other) }));
+        }
+    }
+    out.into_iter().map(|(_, _, g)| g).collect()
+}
+
+/// The GPUs to list: what the graphics library found, plus (Linux) any GPU it couldn't use
+/// because no driver is loaded. Falls back to the renderer's own name.
+fn gpu_list(renderer: &str) -> Vec<Gpu> {
+    let mut gpus = GPUS.get().cloned().unwrap_or_default();
+    gpus.extend(driverless_gpus(&gpus));
+    if gpus.is_empty() && !renderer.is_empty() && renderer != "?" {
+        gpus.push(Gpu { name: renderer.split(" · ").next().unwrap_or(renderer).to_string(), kind: GpuKind::Other });
+    }
+    gpus
+}
+
+/// Rows for the Specs card and report: "Integrated GPU" / "Discrete GPU" when the computer has
+/// both kinds, otherwise just "GPU".
+pub fn gpu_rows(gpus: &[Gpu]) -> Vec<(&'static str, String)> {
+    let both = gpus.iter().any(|g| g.kind == GpuKind::Integrated) && gpus.iter().any(|g| g.kind == GpuKind::Discrete);
+    let mut sorted: Vec<&Gpu> = gpus.iter().collect();
+    sorted.sort_by_key(|g| match g.kind {
+        GpuKind::Integrated => 0,
+        GpuKind::Discrete => 1,
+        GpuKind::Other => 2,
+    });
+    sorted
+        .into_iter()
+        .map(|g| {
+            let label = match (both, g.kind) {
+                (true, GpuKind::Integrated) => "Integrated GPU",
+                (true, GpuKind::Discrete) => "Discrete GPU",
+                _ => "GPU",
+            };
+            (label, g.name.clone())
+        })
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn driverless_gpus(known: &[Gpu]) -> Vec<Gpu> {
+    // A display controller with no kernel driver bound never reaches the graphics library.
+    let mut out = Vec::new();
+    let Ok(dir) = std::fs::read_dir("/sys/bus/pci/devices") else { return out };
+    for e in dir.flatten() {
+        let read = |f: &str| std::fs::read_to_string(e.path().join(f)).map(|s| s.trim().to_string()).unwrap_or_default();
+        // PCI class 0x03xxxx = display controller.
+        if !read("class").starts_with("0x03") || e.path().join("driver").exists() {
+            continue;
+        }
+        let vendor = match read("vendor").as_str() {
+            "0x10de" => "NVIDIA",
+            "0x1002" => "AMD",
+            "0x8086" => "Intel",
+            _ => "",
+        };
+        if vendor.is_empty() || known.iter().any(|g| g.name.to_ascii_lowercase().contains(&vendor.to_ascii_lowercase())) {
+            continue;
+        }
+        let kind = if vendor == "Intel" { GpuKind::Integrated } else { GpuKind::Discrete };
+        out.push(Gpu { name: tr!("{0} GPU (no driver loaded)", vendor), kind });
+    }
+    out
+}
+
+#[cfg(not(target_os = "linux"))]
+fn driverless_gpus(_known: &[Gpu]) -> Vec<Gpu> {
+    Vec::new()
+}
+
 enum Msg {
     Info(Info),
     Batteries(Result<Vec<Battery>, String>),
@@ -167,6 +280,9 @@ impl SystemPage {
             lines.push(serial_line(&i.serial));
             lines.push(tr!("Processor: {0}", cpu_text(i)));
             lines.push(tr!("Memory: {0}", ram_text(i.ram_bytes)));
+            for (label, name) in gpu_rows(&gpu_list("")) {
+                lines.push(format!("{}: {name}", t(label)));
+            }
             for d in &i.drives {
                 lines.push(tr!("Drive: {0}", drive_text(d)));
             }
@@ -275,12 +391,11 @@ impl SystemPage {
             theme::card().show(&mut cols[1], |ui| {
                 ui.set_min_width(ui.available_width());
                 theme::card_title(ui, "Specs", "スペック", cjk);
-                let mut rows = vec![
-                    (t("Processor"), cpu_text(&info)),
-                    (t("Memory"), ram_text(info.ram_bytes)),
-                    (t("Graphics"), renderer.to_string()),
-                    (t("Screen"), screen.map_or("?".into(), |s| format!("{:.0} × {:.0}", s.x, s.y))),
-                ];
+                let mut rows = vec![(t("Processor"), cpu_text(&info)), (t("Memory"), ram_text(info.ram_bytes))];
+                for (label, name) in gpu_rows(&gpu_list(renderer)) {
+                    rows.push((t(label), name));
+                }
+                rows.push((t("Screen"), screen.map_or("?".into(), |s| format!("{:.0} × {:.0}", s.x, s.y))));
                 if info.drives.is_empty() {
                     rows.push((t("Drives"), t("none found").into()));
                 }
@@ -974,6 +1089,36 @@ mod tests {
         assert_eq!(installed_gb(16.0), 16);
         assert_eq!(installed_gb(9.6), 12);
         assert_eq!(installed_gb(31.2), 32);
+    }
+
+    fn seen(name: &str, vendor: u32, device: u32, kind: Option<GpuKind>, gl: bool) -> AdapterSeen {
+        AdapterSeen { name: name.into(), vendor, device, kind, gl }
+    }
+
+    #[test]
+    fn gpus_are_listed_once_each_with_their_kind() {
+        let found = unique_gpus(&[
+            seen("Mesa Intel(R) UHD Graphics (ICL GT1)", 0x8086, 0, Some(GpuKind::Integrated), true),
+            seen("Intel(R) UHD Graphics (ICL GT1)", 0x8086, 0x8a56, Some(GpuKind::Integrated), false),
+            seen("NVIDIA GeForce MX330", 0x10de, 0x1d16, Some(GpuKind::Discrete), false),
+            seen("llvmpipe (LLVM 19.1.7, 256 bits)", 0x10005, 0, None, false),
+        ]);
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].name, "Intel UHD Graphics (ICL GT1)", "the Vulkan name wins over OpenGL's");
+        let rows = gpu_rows(&found);
+        assert_eq!(rows[0], ("Integrated GPU", "Intel UHD Graphics (ICL GT1)".to_string()));
+        assert_eq!(rows[1], ("Discrete GPU", "NVIDIA GeForce MX330".to_string()));
+    }
+
+    #[test]
+    fn a_single_gpu_is_just_gpu() {
+        let one = unique_gpus(&[seen("AMD Radeon RX 7600", 0x1002, 0x7480, Some(GpuKind::Discrete), false)]);
+        assert_eq!(gpu_rows(&one), vec![("GPU", "AMD Radeon RX 7600".to_string())]);
+        let two_discrete = vec![
+            Gpu { name: "NVIDIA GeForce RTX 4070".into(), kind: GpuKind::Discrete },
+            Gpu { name: "NVIDIA GeForce RTX 4070".into(), kind: GpuKind::Discrete },
+        ];
+        assert!(gpu_rows(&two_discrete).iter().all(|(l, _)| *l == "GPU"));
     }
 
     #[test]
