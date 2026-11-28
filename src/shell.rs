@@ -364,13 +364,27 @@ impl App {
                         (t("Screen"), screen.map_or("?".into(), |s| format!("{:.0} × {:.0}", s.x, s.y))),
                         (t("Version"), env!("CARGO_PKG_VERSION").to_string()),
                     ];
+                    let serial = self.system.serial_text();
+                    if let Some((s, _)) = &serial {
+                        rows.insert(0, (t("Serial number"), s.clone()));
+                    }
                     if let Some(m) = model {
                         rows.insert(0, (t("Model"), m));
                     }
+                    let serial_label = t("Serial number");
+                    let copyable = serial.as_ref().is_some_and(|(_, known)| *known);
                     egui::Grid::new("sysinfo").num_columns(2).spacing([14.0, 6.0]).show(ui, |ui| {
                         for (k, v) in rows {
                             ui.label(egui::RichText::new(k).size(13.0).color(theme::TEXT_DIM));
-                            ui.label(egui::RichText::new(v).size(13.0).color(Color32::WHITE));
+                            if k == serial_label && copyable {
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new(v).size(13.0).color(Color32::WHITE));
+                                    ui.add_space(4.0);
+                                    self.system.copy_serial_button(ui, t("Copy"), Vec2::new(64.0, 24.0));
+                                });
+                            } else {
+                                ui.label(egui::RichText::new(v).size(13.0).color(Color32::WHITE));
+                            }
                             ui.end_row();
                         }
                     });

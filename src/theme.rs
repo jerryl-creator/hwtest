@@ -99,7 +99,10 @@ fn cjk_font_paths() -> [Vec<(String, u32)>; 4] {
 pub fn apply_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) -> bool {
     let [ja, ja_bold, zh, zh_bold] = cjk_font_paths();
     let (ja, ja_bold, zh, zh_bold) = (first_font(&ja), first_font(&ja_bold), first_font(&zh), first_font(&zh_bold));
-    let chinese_first = lang == crate::i18n::Lang::Zh;
+    // Windows' Japanese fonts (Yu Gothic, Meiryo) draw "\\" as "¥", the Japanese convention, so
+    // "C:\\" read "C:¥". Only Japanese text should get that: on Windows every other language
+    // leads with the Chinese font, whose backslash is a backslash.
+    let chinese_first = lang == crate::i18n::Lang::Zh || (cfg!(windows) && lang != crate::i18n::Lang::Ja);
     let order = |a, b| if chinese_first { [b, a] } else { [a, b] };
 
     let mut fonts = egui::FontDefinitions::default();

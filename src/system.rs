@@ -259,6 +259,30 @@ impl SystemPage {
         }
     }
 
+    /// The serial number for the Home page: the number itself, or why there isn't one.
+    pub fn serial_text(&self) -> Option<(String, bool)> {
+        self.info.as_ref().map(|i| match &i.serial {
+            Serial::Known(s) => (s.clone(), true),
+            Serial::NeedsAdmin => (t("needs administrator rights to read").to_string(), false),
+            Serial::NotSet => (t("not set by the maker").to_string(), false),
+        })
+    }
+
+    /// A pill that copies the serial number, reading "Copied!" for a moment afterwards.
+    pub fn copy_serial_button(&mut self, ui: &mut egui::Ui, label: &str, size: Vec2) {
+        let now = ui.input(|i| i.time);
+        let Some(Serial::Known(serial)) = self.info.as_ref().map(|i| i.serial.clone()) else { return };
+        let copied = self.copied_at.is_some_and(|at| now - at < 2.5);
+        let text = if copied { t("Copied!") } else { label };
+        if theme::fancy_button(ui, text, size, theme::LIGHT, theme::SILVER, true).clicked() {
+            ui.ctx().copy_text(serial);
+            self.copied_at = Some(now);
+        }
+        if copied {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(300));
+        }
+    }
+
     /// The model name for the Home page, once known.
     pub fn model(&mut self) -> Option<String> {
         self.pull();
@@ -379,15 +403,9 @@ impl SystemPage {
                 }
                 rows.push((t("Operating system"), info.os.clone()));
                 grid(ui, "sys-id", &rows);
-                if let Serial::Known(s) = &info.serial {
-                    ui.add_space(6.0);
-                    if ui.button(t("Copy serial number")).clicked() {
-                        ui.ctx().copy_text(s.clone());
-                        self.copied_at = Some(now);
-                    }
-                    if self.copied_at.is_some_and(|at| now - at < 3.0) {
-                        ui.label(egui::RichText::new(t("Copied!")).color(Color32::WHITE));
-                    }
+                if matches!(info.serial, Serial::Known(_)) {
+                    ui.add_space(10.0);
+                    ui.vertical_centered(|ui| self.copy_serial_button(ui, t("Copy serial number"), Vec2::new(200.0, 32.0)));
                 }
             });
             theme::card().show(&mut cols[1], |ui| {
@@ -873,15 +891,27 @@ fn collect() -> Info {
     };
     Info {
         model: dmi.model(),
-        serial: dmi.serial(),
+        // Dev: NYANSPECT_SERIAL_DEMO=<text> shows a serial number for screenshots.
+        serial: std::env::var("NYANSPECT_SERIAL_DEMO").map_or_else(|_| dmi.serial(), Serial::Known),
         bios: dmi.bios(),
         os,
-        cpu: cpus.first().map(|c| c.brand().replace("(R)", "").replace("(TM)", "").replace("(tm)", "").split_whitespace().collect::<Vec<_>>().join(" ")).filter(|s| !s.is_empty()),
+        cpu: cpus.first().map(|c| cpu_name(c.brand())).filter(|s| !s.is_empty()),
         cores: System::physical_core_count().ok(),
         threads: cpus.len(),
         ram_bytes: sys.as_ref().map_or(0, |s| s.total_memory()),
         drives: read_drives(),
     }
+}
+
+/// A processor name without trademark marks, and without the ", 10 COMPUTE CORES 4C+6G" tail
+/// some AMD chips add (it doesn't fit and the core count is shown separately).
+fn cpu_name(brand: &str) -> String {
+    let name = brand.replace("(R)", "").replace("(TM)", "").replace("(tm)", "");
+    let name = match name.split_once(',') {
+        Some((head, tail)) if tail.to_ascii_uppercase().contains("COMPUTE CORES") => head.to_string(),
+        _ => name,
+    };
+    name.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn read_batteries() -> Result<Vec<Battery>, String> {
@@ -1121,6 +1151,13 @@ mod tests {
             Gpu { name: "NVIDIA GeForce RTX 4070".into(), kind: GpuKind::Discrete },
         ];
         assert!(gpu_rows(&two_discrete).iter().all(|(l, _)| *l == "GPU"));
+    }
+
+    #[test]
+    fn cpu_names_are_tidied() {
+        assert_eq!(cpu_name("AMD A8-9600 RADEON R7, 10 COMPUTE CORES 4C+6G   "), "AMD A8-9600 RADEON R7");
+        assert_eq!(cpu_name("Intel(R) Core(TM) i5-1035G1 CPU @ 1.00GHz"), "Intel Core i5-1035G1 CPU @ 1.00GHz");
+        assert_eq!(cpu_name("AMD Ryzen 7 5800X 8-Core Processor"), "AMD Ryzen 7 5800X 8-Core Processor");
     }
 
     #[test]
