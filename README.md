@@ -37,6 +37,7 @@ Or open any test from the sidebar. Your settings are remembered between launches
 - The layout follows your controller: **Xbox**, **PlayStation** (PS3, PS4, PS5) or **Nintendo**, with the right button names and symbols
 - Every button, D-pad direction and analog trigger, plus both sticks with a live position dot
 - **Stick drift test**: let go of both sticks and Nyanspect measures where each one rests, on a zoomed plot. Under 5% off-centre is normal; over 10% means games may move on their own
+- **Motion sensors (6-axis)** on PlayStation 4 / 5 controllers: live accelerometer and gyroscope readings, a tilt bubble, and checks for tilting and turning around each axis
 - **Vibration test** for the strong and weak motors separately
 
 **★ Display**
