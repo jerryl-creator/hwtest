@@ -1,7 +1,7 @@
 //! Translations: one row per English string, columns [English, 简体中文, Bahasa Melayu, 日本語].
 //! `{0}`, `{1}`… are values filled in at run time and may be reordered.
 
-pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK, SHELL, POLISH, SYSTEM, DRIFT];
+pub static ROWS: &[&[[&str; 4]]] = &[MAIN, KEYBOARD, MOUSE, GAMEPAD, DISPLAY, SPEAKERS, MIC, CAMERA, REPORT, MIC_HINT, QUICK, SHELL, POLISH, SYSTEM, DRIFT, MOTION];
 
 const MAIN: &[[&str; 4]] = &[
     ["Keyboard", "键盘", "Papan Kekunci", "キーボード"],
@@ -576,4 +576,21 @@ const DRIFT: &[[&str; 4]] = &[
     ["Follow your computer's light / dark setting", "跟随电脑的浅色 / 深色设置", "Ikut tetapan cerah / gelap komputer anda", "コンピューターのライト / ダーク設定に合わせます"],
     ["Switch to the dark theme", "切换到深色主题", "Tukar ke tema gelap", "ダークテーマに切り替え"],
     ["Switch to the light theme", "切换到浅色主题", "Tukar ke tema cerah", "ライトテーマに切り替え"],
+];
+
+const MOTION: &[[&str; 4]] = &[
+    ["Motion sensors (6-axis)", "体感传感器（六轴）", "Penderia gerakan (6 paksi)", "モーションセンサー（6軸）"],
+    ["Waiting for the controller's motion data… move it a little.", "正在等待手柄的体感数据…请稍微动一下手柄。", "Menunggu data gerakan pengawal… gerakkan sedikit.", "コントローラーのモーションデータを待っています…少し動かしてください。"],
+    ["Connect a PlayStation 4 or 5 controller (DualShock 4 / DualSense) to test its accelerometer and gyroscope. Xbox controllers don't have motion sensors.", "连接 PlayStation 4 或 5 手柄（DualShock 4 / DualSense）即可测试加速度计和陀螺仪。Xbox 手柄没有体感传感器。", "Sambungkan pengawal PlayStation 4 atau 5 (DualShock 4 / DualSense) untuk menguji pecutan dan giroskopnya. Pengawal Xbox tiada penderia gerakan.", "PlayStation 4 / 5 のコントローラー（DualShock 4 / DualSense）を接続すると、加速度センサーとジャイロを確認できます。Xbox コントローラーにはモーションセンサーがありません。"],
+    ["Found {0}, but Linux doesn't allow reading its motion sensors. Install your distribution's game controller rules (for example steam-devices or game-devices-udev), then plug the controller in again.", "找到了 {0}，但 Linux 不允许读取它的体感传感器。请安装发行版的游戏手柄规则（例如 steam-devices 或 game-devices-udev），然后重新插入手柄。", "{0} ditemui, tetapi Linux tidak membenarkan penderia gerakannya dibaca. Pasang peraturan pengawal permainan distribusi anda (contohnya steam-devices atau game-devices-udev), kemudian palam semula pengawal.", "{0} が見つかりましたが、Linux がモーションセンサーの読み取りを許可していません。ディストリビューションのゲームコントローラー用ルール（steam-devices や game-devices-udev など）をインストールして、コントローラーを挿し直してください。"],
+    ["Accelerometer (g)", "加速度计（g）", "Meter pecutan (g)", "加速度センサー（g）"],
+    ["Gyroscope (°/s)", "陀螺仪（°/s）", "Giroskop (°/s)", "ジャイロ（°/s）"],
+    ["Tilt the controller every way, then give it a quick twist around each axis. Put it down for a moment to check the sensors at rest.", "把手柄往各个方向倾斜，再绕每个轴快速转一下。然后放下片刻，检查静止时的读数。", "Condongkan pengawal ke semua arah, kemudian pusingkan dengan pantas pada setiap paksi. Letakkan sebentar untuk menyemak penderia semasa rehat.", "コントローラーをあらゆる方向に傾けてから、各軸のまわりにすばやくひねってください。少しの間置いて、静止時の値も確認します。"],
+    ["Tilt {0}", "倾斜 {0}", "Condong {0}", "傾き {0}"],
+    ["Turn {0}", "转动 {0}", "Pusing {0}", "回転 {0}"],
+    ["At rest: {0} g (should be about 1 g)", "静止时：{0} g（应约为 1 g）", "Semasa rehat: {0} g (sepatutnya kira-kira 1 g)", "静止時：{0} g（約 1 g が正常）"],
+    ["Gyro at rest: {0} °/s (should be near 0)", "静止时陀螺仪：{0} °/s（应接近 0）", "Giroskop semasa rehat: {0} °/s (sepatutnya hampir 0)", "静止時のジャイロ：{0} °/s（0 に近いのが正常）"],
+    ["Motion: tilted {0} of 3 ways, turned {1} of 3 ways", "体感：倾斜 {0}/3 个方向，转动 {1}/3 个方向", "Gerakan: condong {0} daripada 3 arah, pusing {1} daripada 3 arah", "モーション：傾き 3 方向中 {0}、回転 3 方向中 {1}"],
+    ["Accelerometer at rest: {0} g (should be about 1 g)", "加速度计静止时：{0} g（应约为 1 g）", "Meter pecutan semasa rehat: {0} g (sepatutnya kira-kira 1 g)", "加速度センサー（静止時）：{0} g（約 1 g が正常）"],
+    ["Gyroscope at rest: {0} °/s (should be near 0)", "陀螺仪静止时：{0} °/s（应接近 0）", "Giroskop semasa rehat: {0} °/s (sepatutnya hampir 0)", "ジャイロ（静止時）：{0} °/s（0 に近いのが正常）"],
 ];

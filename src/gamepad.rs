@@ -279,6 +279,8 @@ pub struct GamepadTest {
     /// Which rumble was tried last, and the user's answer to "did you feel it?".
     rumble_kind: Option<Motor>,
     pub rumble_felt: Option<bool>,
+    /// 6-axis motion sensors (PlayStation 4 / 5 controllers).
+    pub motion: crate::motion::Motion,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -315,6 +317,7 @@ impl Default for GamepadTest {
             deadzones: [None, None],
             rumble_kind: None,
             rumble_felt: None,
+            motion: Default::default(),
         };
         s.apply_demo();
         s
@@ -428,10 +431,11 @@ impl GamepadTest {
         let done = BUTTONS.iter().filter(|b| self.tested.contains(b)).count();
         let measured_drift = self.measured.is_some_and(|m| m.iter().any(|r| r.level() == Level::Drift));
         let drift = self.left.drift.is_some() || self.right.drift.is_some() || measured_drift;
-        let status = if drift || self.rumble_felt == Some(false) {
+        let m = &self.motion.checks;
+        let status = if drift || self.rumble_felt == Some(false) || m.gravity_wrong() || m.gyro_drifts() {
             Status::Issue
         } else if self.name.is_none()
-            || (done == 0 && self.left.max_reach < 0.05 && self.right.max_reach < 0.05 && self.measured.is_none())
+            || (done == 0 && self.left.max_reach < 0.05 && self.right.max_reach < 0.05 && self.measured.is_none() && !m.tested())
         {
             Status::NotTested
         } else if done == BUTTONS.len() && self.left_ok() && self.right_ok() {
@@ -470,6 +474,15 @@ impl GamepadTest {
                 });
             }
         }
+        if m.tested() {
+            lines.push(tr!("Motion: tilted {0} of 3 ways, turned {1} of 3 ways", m.tilts_done(), m.turns_done()));
+            if let Some(g) = m.rest_gravity {
+                lines.push(tr!("Accelerometer at rest: {0} g (should be about 1 g)", format!("{g:.2}")));
+            }
+            if let Some(d) = m.rest_gyro {
+                lines.push(tr!("Gyroscope at rest: {0} °/s (should be near 0)", format!("{d:.1}")));
+            }
+        }
         match self.rumble_felt {
             Some(true) => lines.push(t("Vibration: works").into()),
             Some(false) => lines.push(t("Vibration: not felt").into()),
@@ -479,7 +492,16 @@ impl GamepadTest {
         Section { title: "Gamepad", jp: "ゲームパッド", status, lines }
     }
 
+    /// Stop any vibration that's still playing.
+    pub fn stop_rumble(&mut self) {
+        if let Some(e) = self.effect.take() {
+            let _ = e.stop();
+        }
+    }
+
     pub fn reset(&mut self) {
+        self.stop_rumble();
+        self.motion.reset();
         self.tested.clear();
         self.left = Default::default();
         self.right = Default::default();
@@ -531,7 +553,13 @@ impl GamepadTest {
     fn rumble(&mut self, motor: Motor) {
         let (Some(g), Some(id)) = (self.gilrs.as_mut(), self.active) else { return };
         use gilrs::ff::{BaseEffect, BaseEffectType, EffectBuilder, Replay, Ticks};
+        // Stop anything still playing first.
+        if let Some(old) = self.effect.take() {
+            let _ = old.stop();
+        }
         let mut builder = EffectBuilder::new();
+        // gilrs repeats an effect forever unless told otherwise: play it once.
+        builder.repeat(gilrs::ff::Repeat::For(Ticks::from_ms(700)));
         if motor != Motor::Weak {
             builder.add_effect(BaseEffect {
                 kind: BaseEffectType::Strong { magnitude: 45_000 },
@@ -663,6 +691,8 @@ impl GamepadTest {
         let demo = std::env::var("NYANSPECT_DRIFT_DEMO").is_ok();
         self.drift_card(ui, cjk, connected || demo, connected.then_some((ls, rs)), now);
         ui.add_space(12.0);
+        self.motion_card(ui, cjk);
+        ui.add_space(12.0);
         self.vibration_card(ui, cjk, ff, demo);
     }
 
@@ -740,6 +770,101 @@ impl GamepadTest {
                         .size(12.0)
                         .color(theme::TEXT_DIM),
                     );
+                });
+            });
+        });
+    }
+
+    fn motion_card(&mut self, ui: &mut egui::Ui, cjk: bool) {
+        use crate::motion::{Source, TILT_G, TURN_DPS};
+        self.motion.start();
+        self.motion.update();
+        let source = self.motion.source();
+        theme::card().show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                theme::card_title(ui, "Motion sensors (6-axis)", "モーションセンサー", cjk);
+                if let Source::Live(name) = &source {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(egui::RichText::new(name).size(12.5).color(theme::TEXT_DIM));
+                    });
+                }
+            });
+            let sample = match &source {
+                Source::Live(_) => self.motion.last,
+                _ => None,
+            };
+            let Some(s) = sample else {
+                let msg = match &source {
+                    Source::NeedsPermission(name) => tr!(
+                        "Found {0}, but Linux doesn't allow reading its motion sensors. Install your distribution's game controller rules (for example steam-devices or game-devices-udev), then plug the controller in again.",
+                        name
+                    ),
+                    Source::Live(_) => t("Waiting for the controller's motion data… move it a little.").to_string(),
+                    Source::Searching => t(
+                        "Connect a PlayStation 4 or 5 controller (DualShock 4 / DualSense) to test its accelerometer and gyroscope. Xbox controllers don't have motion sensors.",
+                    )
+                    .to_string(),
+                };
+                theme::note(ui, &msg, 13.0);
+                return;
+            };
+            ui.ctx().request_repaint();
+            ui.horizontal_top(|ui| {
+                // Bubble level: X and Z acceleration move the bubble; tilt to roll it around.
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(150.0), Sense::hover());
+                let p = ui.painter();
+                let c = rect.center();
+                let r = rect.width() / 2.0 - 4.0;
+                p.circle_filled(c, r, Color32::from_rgba_unmultiplied(8, 8, 10, 230));
+                p.circle_stroke(c, r, Stroke::new(1.0, alpha(theme::LIGHT, 0.25)));
+                p.circle_stroke(c, r * 0.5, Stroke::new(1.0, alpha(theme::LIGHT, 0.12)));
+                p.line_segment([c - Vec2::new(r, 0.0), c + Vec2::new(r, 0.0)], Stroke::new(1.0, alpha(theme::LIGHT, 0.08)));
+                p.line_segment([c - Vec2::new(0.0, r), c + Vec2::new(0.0, r)], Stroke::new(1.0, alpha(theme::LIGHT, 0.08)));
+                let v = Vec2::new(s.accel[0], s.accel[2]);
+                let v = if v.length() > 1.0 { v.normalized() } else { v };
+                let bubble = c + v * (r - 10.0);
+                theme::glow(p, bubble, 20.0, alpha(Color32::WHITE, 0.3));
+                p.circle_filled(bubble, 9.0, Color32::WHITE);
+                ui.add_space(18.0);
+
+                // Live readings.
+                ui.vertical(|ui| {
+                    ui.set_width((ui.available_width() * 0.5).clamp(220.0, 380.0));
+                    ui.label(egui::RichText::new(t("Accelerometer (g)")).font(theme::bold(13.5)).color(Color32::WHITE));
+                    for (i, axis) in ["X", "Y", "Z"].iter().enumerate() {
+                        meter(ui, axis, s.accel[i], 2.0, format!("{:+.2}", s.accel[i]));
+                    }
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new(t("Gyroscope (°/s)")).font(theme::bold(13.5)).color(Color32::WHITE));
+                    for (i, axis) in ["X", "Y", "Z"].iter().enumerate() {
+                        meter(ui, axis, s.gyro[i], 500.0, format!("{:+.0}", s.gyro[i]));
+                    }
+                });
+                ui.add_space(18.0);
+
+                // What's been checked.
+                ui.vertical(|ui| {
+                    theme::note(ui, t("Tilt the controller every way, then give it a quick twist around each axis. Put it down for a moment to check the sensors at rest."), 13.0);
+                    ui.add_space(6.0);
+                    let m = self.motion.checks;
+                    ui.horizontal_wrapped(|ui| {
+                        for (i, axis) in ["X", "Y", "Z"].iter().enumerate() {
+                            chip(ui, &tr!("Tilt {0}", axis), m.tilt[i] >= TILT_G);
+                        }
+                        for (i, axis) in ["X", "Y", "Z"].iter().enumerate() {
+                            chip(ui, &tr!("Turn {0}", axis), m.turn[i] >= TURN_DPS);
+                        }
+                    });
+                    ui.add_space(6.0);
+                    if let Some(g) = m.rest_gravity {
+                        let text = tr!("At rest: {0} g (should be about 1 g)", format!("{g:.2}"));
+                        ui.label(egui::RichText::new(if m.gravity_wrong() { format!("⚠ {text}") } else { text }).size(12.5).color(Color32::WHITE));
+                    }
+                    if let Some(d) = m.rest_gyro {
+                        let text = tr!("Gyro at rest: {0} °/s (should be near 0)", format!("{d:.1}"));
+                        ui.label(egui::RichText::new(if m.gyro_drifts() { format!("⚠ {text}") } else { text }).size(12.5).color(Color32::WHITE));
+                    }
                 });
             });
         });
@@ -994,6 +1119,24 @@ fn draw_rest_plot(p: &egui::Painter, rect: Rect, trail: &VecDeque<Vec2>, rest: O
             p.circle_filled(dot, 4.5, Color32::WHITE);
         }
     }
+}
+
+/// One axis: a centred bar (left of the middle = negative) with its value.
+fn meter(ui: &mut egui::Ui, axis: &str, value: f32, full: f32, text: String) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(axis).font(theme::bold(12.5)).color(theme::TEXT_DIM));
+        let (bar, _) = ui.allocate_exact_size(Vec2::new((ui.available_width() - 60.0).max(80.0), 10.0), Sense::hover());
+        let p = ui.painter();
+        p.rect_filled(bar, 5.0, Color32::from_rgb(34, 34, 38));
+        let mid = bar.center().x;
+        let x = mid + (value / full).clamp(-1.0, 1.0) * bar.width() / 2.0;
+        let fill = Rect::from_x_y_ranges(mid.min(x)..=mid.max(x), bar.y_range());
+        if fill.width() > 0.5 {
+            p.rect_filled(fill, 5.0, Color32::WHITE);
+        }
+        p.line_segment([Pos2::new(mid, bar.top() - 2.0), Pos2::new(mid, bar.bottom() + 2.0)], Stroke::new(1.0, alpha(theme::LIGHT, 0.5)));
+        ui.label(egui::RichText::new(text).monospace().size(12.0).color(Color32::WHITE));
+    });
 }
 
 fn chip(ui: &mut egui::Ui, label: &str, ok: bool) {

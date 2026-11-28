@@ -20,10 +20,14 @@ starship-battery = "0.12.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 v4l = "0.14"
+# Motion sensors: reading the kernel's evdev device (ioctl for its value ranges).
+libc = "0.2.191"
 
 [target.'cfg(windows)'.dependencies]
 nokhwa = { version = "0.10.11", default-features = false, features = ["input-msmf"] }
 windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation"] }
+# Motion sensors: PlayStation controllers' raw reports (pure-Rust Windows backend, no C).
+hidapi = { version = "2.6.7", default-features = false, features = ["windows-native"] }
 
 [patch.crates-io]
 egui-winit = { path = "vendor/egui-winit" }

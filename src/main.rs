@@ -8,6 +8,7 @@ mod gamepad;
 mod keyboard;
 mod layouts;
 mod mic;
+mod motion;
 mod mouse;
 mod pixels;
 mod quick;
@@ -337,6 +338,9 @@ impl eframe::App for App {
             self.speakers.stop();
             // Privacy: the microphone is only ever open while the Audio tab is showing.
             self.mic.stop();
+        }
+        if self.tab != Tab::Gamepad {
+            self.gamepad.stop_rumble();
         }
         if self.tab != Tab::Camera {
             // Privacy: the camera is only ever on while the Camera tab is showing.
