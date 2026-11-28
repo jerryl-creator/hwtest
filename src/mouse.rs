@@ -523,14 +523,7 @@ fn fmt_gap(secs: f64) -> String {
 }
 
 fn chip(ui: &mut egui::Ui, label: &str, ok: bool) {
-    egui::Frame::new()
-        .fill(if ok { Color32::WHITE } else { alpha(theme::SILVER, 0.15) })
-        .corner_radius(10)
-        .inner_margin(egui::Margin::symmetric(9, 3))
-        .show(ui, |ui| {
-            let text = if ok { format!("✔ {label}") } else { label.to_string() };
-            ui.label(egui::RichText::new(text).size(12.5).color(if ok { theme::INK } else { theme::TEXT_DIM }));
-        });
+    theme::chip(ui, label, ok, 12.5);
 }
 
 #[cfg(test)]

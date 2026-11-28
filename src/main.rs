@@ -165,11 +165,17 @@ impl App {
     }
 
     /// "🌐 EN" pill that opens a menu of languages.
+    /// The language pill's width (the sidebar leaves room for it next to Settings).
+    pub(crate) fn language_button_width(ui: &egui::Ui, compact: bool) -> f32 {
+        let label = if compact { "🌐".to_string() } else { format!("🌐 {}", i18n::lang().short()) };
+        ui.painter().layout_no_wrap(label, theme::bold(13.0), Color32::WHITE).size().x + 26.0
+    }
+
     pub(crate) fn language_button(&mut self, ui: &mut egui::Ui, compact: bool) {
         let cur = i18n::lang();
         let label = if compact { "🌐".to_string() } else { format!("🌐 {}", cur.short()) };
         let font = theme::bold(13.0);
-        let w = ui.painter().layout_no_wrap(label.clone(), font.clone(), Color32::WHITE).size().x + 26.0;
+        let w = Self::language_button_width(ui, compact);
         let (r, resp) = ui.allocate_exact_size(Vec2::new(w, 32.0), Sense::CLICK);
         let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(i18n::t("Language"));
         let p = ui.painter();
@@ -303,6 +309,8 @@ impl eframe::App for App {
         // Fullscreen display test takes over the whole window.
         if self.pixels.running {
             self.pixels.fullscreen(ctx, ui);
+            // Test colours are shown as they are, never flipped by the light theme.
+            theme::finish_frame(ctx, false, None);
             return;
         }
         let perf_t0 = std::time::Instant::now();
@@ -547,7 +555,8 @@ fn pick_adapter(adapters: &[wgpu::Adapter], surface: Option<&wgpu::Surface<'_>>)
         .cloned()
         .ok_or_else(|| "no GPU adapter can draw to this window".to_string())?;
     let info = best.get_info();
-    let _ = RENDERER_INFO.set(format!("{} · {:?}", info.name, info.backend));
+    let name = info.name.replace("(R)", "").replace("(TM)", "").split_whitespace().collect::<Vec<_>>().join(" ");
+    let _ = RENDERER_INFO.set(format!("{name} · {:?}", info.backend));
     // Remember every GPU for the System page.
     let seen: Vec<system::AdapterSeen> = adapters
         .iter()

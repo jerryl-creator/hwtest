@@ -358,6 +358,35 @@ pub fn star(painter: &egui::Painter, c: Pos2, size: f32, color: Color32) {
 
 // ---------- widgets ----------
 
+/// A small status pill ("✔ Left" once done). In a wrapping row it starts a new line when it
+/// won't fit, instead of being squeezed into a tall, narrow pill.
+pub fn chip(ui: &mut Ui, label: &str, ok: bool, size: f32) {
+    let text = if ok { format!("✔ {label}") } else { label.to_string() };
+    let font = FontId::proportional(size);
+    let width = ui.painter().layout_no_wrap(text.clone(), font.clone(), Color32::WHITE).size().x + 18.0;
+    // Space left on this row (in a wrapping row `available_width` is the whole row's width).
+    let left = ui.max_rect().right() - ui.cursor().left();
+    let at_row_start = ui.cursor().left() <= ui.max_rect().left() + 1.0;
+    if width > left && !at_row_start {
+        ui.end_row();
+    }
+    egui::Frame::new()
+        .fill(if ok { Color32::WHITE } else { alpha(SILVER, 0.15) })
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(9, 3))
+        .show(ui, |ui| {
+            ui.add(egui::Label::new(egui::RichText::new(text).font(font).color(if ok { INK } else { TEXT_DIM })).extend());
+        });
+}
+
+/// A dim note that wraps normally. (Inside `ui.columns` labels are justified, which spreads
+/// a short last line's words far apart in long-worded languages like Malay.)
+pub fn note(ui: &mut Ui, text: &str, size: f32) {
+    ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+        ui.label(egui::RichText::new(text).size(size).color(TEXT_DIM));
+    });
+}
+
 /// Gradient pill button with hover glow and press bounce.
 pub fn fancy_button(ui: &mut Ui, label: &str, size: Vec2, c1: Color32, c2: Color32, enabled: bool) -> Response {
     // Grow to fit longer (translated) labels.

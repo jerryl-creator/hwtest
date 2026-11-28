@@ -997,14 +997,7 @@ fn draw_rest_plot(p: &egui::Painter, rect: Rect, trail: &VecDeque<Vec2>, rest: O
 }
 
 fn chip(ui: &mut egui::Ui, label: &str, ok: bool) {
-    egui::Frame::new()
-        .fill(if ok { Color32::WHITE } else { alpha(theme::SILVER, 0.15) })
-        .corner_radius(10)
-        .inner_margin(egui::Margin::symmetric(8, 2))
-        .show(ui, |ui| {
-            let text = if ok { format!("✔ {label}") } else { label.to_string() };
-            ui.label(egui::RichText::new(text).size(12.0).color(if ok { theme::INK } else { theme::TEXT_DIM }));
-        });
+    theme::chip(ui, label, ok, 12.0);
 }
 
 #[cfg(test)]

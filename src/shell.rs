@@ -181,7 +181,7 @@ impl App {
             ui.vertical_centered(|ui| self.language_button(ui, true));
         } else {
             ui.horizontal(|ui| {
-                let row_w = ui.available_width() - 76.0;
+                let row_w = ui.available_width() - Self::language_button_width(ui, false) - ui.spacing().item_spacing.x;
                 ui.allocate_ui(Vec2::new(row_w, 42.0), |ui| self.nav_row(ui, Tab::Settings, theme::Icon::Settings, "Settings", false));
                 self.language_button(ui, false);
             });
@@ -491,7 +491,7 @@ impl App {
                     self.set_language(&ctx, lang);
                 }
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(t("Until you pick one, Nyanspect follows your system language.")).size(12.5).color(theme::TEXT_DIM));
+                theme::note(ui, t("Until you pick one, Nyanspect follows your system language."), 12.5);
             });
             cols[0].add_space(14.0);
             theme::card().show(&mut cols[0], |ui| {
@@ -519,7 +519,7 @@ impl App {
                 } else {
                     t("Start fresh, for example before testing another computer. Your settings stay.")
                 };
-                ui.label(egui::RichText::new(note).size(12.5).color(theme::TEXT_DIM));
+                theme::note(ui, note, 12.5);
             });
             cols[0].add_space(14.0);
             theme::card().show(&mut cols[0], |ui| {
@@ -532,7 +532,7 @@ impl App {
                     ctx.set_zoom_factor(z);
                 }
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(t("Makes everything bigger or smaller, for small laptops or tired eyes.")).size(12.5).color(theme::TEXT_DIM));
+                theme::note(ui, t("Makes everything bigger or smaller, for small laptops or tired eyes."), 12.5);
             });
 
             theme::card().show(&mut cols[1], |ui| {
@@ -564,7 +564,7 @@ impl App {
                 ui.label(egui::RichText::new(tr!("Nyanspect {0} · free and open source (MIT)", env!("CARGO_PKG_VERSION"))).color(theme::TEXT));
                 ui.hyperlink_to("github.com/jerryl-creator/nyanspect", "https://github.com/jerryl-creator/nyanspect");
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(t("Settings are saved automatically. Nothing you test ever leaves this computer.")).size(12.5).color(theme::TEXT_DIM));
+                theme::note(ui, t("Settings are saved automatically. Nothing you test ever leaves this computer."), 12.5);
             });
         });
     }
