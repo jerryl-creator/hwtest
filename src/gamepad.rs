@@ -81,6 +81,39 @@ pub fn detect(vendor: Option<u16>, product: Option<u16>, name: &str) -> Style {
     Style::Xbox
 }
 
+/// Swap the left and top face buttons when the pad reports them the wrong way round.
+fn swap_xy(b: Button, swap: bool) -> Button {
+    match (swap, b) {
+        (true, Button::West) => Button::North,
+        (true, Button::North) => Button::West,
+        _ => b,
+    }
+}
+
+/// Linux's Xbox driver (`xpad`) sends the left button (X) under the code that officially
+/// means "top", and the top one (Y) under "left". gilrs fixes that from SDL's controller
+/// list, but only for the exact models and firmware versions listed there: an Xbox 360 pad
+/// with firmware 0x0106, for one, isn't, so X lit up Y. When gilrs falls back to the
+/// driver's codes for an xpad pad, swap them back.
+fn needs_xy_swap(pad: &gilrs::Gamepad) -> bool {
+    cfg!(target_os = "linux")
+        && pad.mapping_source() == gilrs::MappingSource::Driver
+        && pad.vendor_id().zip(pad.product_id()).is_some_and(|(v, p)| linux_driver(v, p).as_deref() == Some("xpad"))
+}
+
+/// The kernel driver behind a game controller with these USB IDs (Linux only).
+fn linux_driver(vendor: u16, product: u16) -> Option<String> {
+    let dir = std::fs::read_dir("/sys/class/input").ok()?;
+    dir.flatten().find_map(|e| {
+        let id = |f: &str| std::fs::read_to_string(e.path().join("device/id").join(f)).ok().and_then(|s| u16::from_str_radix(s.trim(), 16).ok());
+        if id("vendor")? != vendor || id("product")? != product {
+            return None;
+        }
+        let driver = std::fs::read_link(e.path().join("device/device/driver")).ok()?;
+        Some(driver.file_name()?.to_string_lossy().into_owned())
+    })
+}
+
 /// What a button is called on this kind of controller.
 pub fn label(style: Style, b: Button) -> &'static str {
     use Button as B;
@@ -281,6 +314,8 @@ pub struct GamepadTest {
     pub rumble_felt: Option<bool>,
     /// 6-axis motion sensors (PlayStation 4 / 5 controllers).
     pub motion: crate::motion::Motion,
+    /// The pad reports X and Y the wrong way round (see `needs_xy_swap`).
+    swap_xy: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -318,6 +353,7 @@ impl Default for GamepadTest {
             rumble_kind: None,
             rumble_felt: None,
             motion: Default::default(),
+            swap_xy: false,
         };
         s.apply_demo();
         s
@@ -355,13 +391,14 @@ impl GamepadTest {
                 let pad = g.gamepad(ev.id);
                 self.name = Some(pad.name().to_string());
                 self.detected = detect(pad.vendor_id(), pad.product_id(), pad.name());
+                self.swap_xy = needs_xy_swap(&pad);
             }
             if let gilrs::EventType::ButtonPressed(b, _) = ev.event {
-                self.tested.insert(b);
+                self.tested.insert(swap_xy(b, self.swap_xy));
             }
             if let gilrs::EventType::ButtonChanged(b, v, _) = ev.event {
                 if v > 0.5 {
-                    self.tested.insert(b);
+                    self.tested.insert(swap_xy(b, self.swap_xy));
                 }
             }
         }
@@ -370,6 +407,7 @@ impl GamepadTest {
                 self.active = Some(id);
                 self.name = Some(pad.name().to_string());
                 self.detected = detect(pad.vendor_id(), pad.product_id(), pad.name());
+                self.swap_xy = needs_xy_swap(&pad);
             }
         }
         if let Some(pad) = self.active.and_then(|id| g.connected_gamepad(id)) {
@@ -594,7 +632,7 @@ impl GamepadTest {
         let ff = pad.as_ref().is_some_and(|p| p.is_ff_supported());
         let pressed: HashSet<Button> = pad
             .as_ref()
-            .map(|p| BUTTONS.iter().copied().filter(|b| p.is_pressed(*b)).collect())
+            .map(|p| BUTTONS.iter().copied().filter(|b| p.is_pressed(swap_xy(*b, self.swap_xy))).collect())
             .unwrap_or_default();
         let trig = |b: Button| pad.as_ref().and_then(|p| p.button_data(b)).map_or(0.0, |d| d.value());
         let (lt, rt) = (trig(Button::LeftTrigger2), trig(Button::RightTrigger2));
@@ -1156,6 +1194,14 @@ mod tests {
         assert_eq!(detect(Some(0x045E), Some(0x0B12), "Xbox Series X Controller"), Style::Xbox);
         assert_eq!(detect(Some(0x057E), Some(0x2009), "Pro Controller"), Style::Nintendo);
         assert_eq!(detect(Some(0x046D), Some(0xC21D), "Logitech Gamepad F310"), Style::Xbox);
+    }
+
+    #[test]
+    fn swapping_x_and_y_only_touches_x_and_y() {
+        assert_eq!(swap_xy(Button::West, true), Button::North);
+        assert_eq!(swap_xy(Button::North, true), Button::West);
+        assert_eq!(swap_xy(Button::South, true), Button::South);
+        assert_eq!(swap_xy(Button::West, false), Button::West);
     }
 
     #[test]
