@@ -55,6 +55,20 @@ pub struct Battery {
     pub charge: f32,
     pub state: &'static str,
     pub cycles: Option<u32>,
+    pub vendor: Option<String>,
+    /// The model name: on many laptops this is the battery's part number (e.g. "L19M3PF4").
+    pub model: Option<String>,
+    pub serial: Option<String>,
+    /// "Li-ion", "Li-polymer"…
+    pub chemistry: Option<&'static str>,
+    pub voltage: Option<f32>,
+    /// Watts flowing in (charging) or out (on battery).
+    pub power_w: Option<f32>,
+    pub temperature_c: Option<f32>,
+    /// Minutes until full (charging) or empty (on battery).
+    pub minutes_left: Option<u32>,
+    /// The laptop stops charging at this percentage (a battery-care setting).
+    pub charge_limit: Option<u32>,
 }
 
 impl Battery {
@@ -171,6 +185,13 @@ impl SystemPage {
                     });
                     if let Some(c) = b.cycles {
                         lines.push(tr!("Charge cycles: {0}", c));
+                    }
+                    let id: Vec<String> = [b.vendor.clone(), b.model.clone(), b.chemistry.map(str::to_string)].into_iter().flatten().collect();
+                    if !id.is_empty() {
+                        lines.push(tr!("Battery: {0}", id.join(" · ")));
+                    }
+                    if let Some(sn) = &b.serial {
+                        lines.push(tr!("Battery serial number: {0}", sn));
                     }
                     if b.worn() {
                         lines.push(t("The battery holds under 80% of its original charge: expect noticeably shorter battery life.").into());
@@ -350,17 +371,48 @@ fn battery_ui(ui: &mut egui::Ui, b: &Battery) {
         p.text(Pos2::new(x, bar.bottom() + 4.0), egui::Align2::CENTER_TOP, "80%", egui::FontId::proportional(11.0), theme::TEXT_DIM);
         ui.add_space(14.0);
     }
-    let mut rows = Vec::new();
+    let not_reported = || t("not reported").to_string();
+    let mut now_rows = Vec::new();
     if b.design_wh > 0.0 {
-        rows.push((t("Holds now"), format!("{} Wh", wh(b.full_wh))));
-        rows.push((t("When new"), format!("{} Wh", wh(b.design_wh))));
+        now_rows.push((t("Holds now"), format!("{} Wh", wh(b.full_wh))));
+        now_rows.push((t("When new"), format!("{} Wh", wh(b.design_wh))));
     }
-    rows.push((t("Charge cycles"), b.cycles.map_or_else(|| t("not reported").to_string(), |c| c.to_string())));
-    rows.push((t("Charge now"), format!("{}% · {}", pct(b.charge), t(b.state))));
-    if !b.name.is_empty() {
-        rows.push((t("Battery"), b.name.clone()));
+    now_rows.push((t("Charge cycles"), b.cycles.map_or_else(not_reported, |c| c.to_string())));
+    now_rows.push((t("Charge now"), format!("{}% · {}", pct(b.charge), t(b.state))));
+    if let Some(w) = b.power_w {
+        let text = if b.state == "Charging" { tr!("charging at {0} W", format!("{w:.1}")) } else { tr!("using {0} W", format!("{w:.1}")) };
+        now_rows.push((t("Power"), text));
     }
-    grid(ui, ("sys-bat", b.name.as_str()), &rows);
+    if let Some(m) = b.minutes_left {
+        let time = duration_text(m);
+        now_rows.push((t("Time left"), if b.state == "Charging" { tr!("{0} until full", time) } else { tr!("{0} until empty", time) }));
+    }
+    if let Some(l) = b.charge_limit {
+        now_rows.push((t("Charge limit"), tr!("stops at {0}% (battery-care setting)", l)));
+    }
+
+    let mut id_rows = vec![
+        (t("Maker"), b.vendor.clone().unwrap_or_else(not_reported)),
+        (t("Model / part number"), b.model.clone().unwrap_or_else(not_reported)),
+        (t("Serial number"), b.serial.clone().unwrap_or_else(not_reported)),
+        (t("Chemistry"), b.chemistry.map_or_else(not_reported, str::to_string)),
+    ];
+    if let Some(v) = b.voltage {
+        id_rows.push((t("Voltage"), format!("{v:.2} V")));
+    }
+    if let Some(c) = b.temperature_c {
+        id_rows.push((t("Temperature"), format!("{c:.0} °C")));
+    }
+    ui.columns(2, |cols| {
+        grid(&mut cols[0], ("sys-bat-now", b.name.as_str()), &now_rows);
+        grid(&mut cols[1], ("sys-bat-id", b.name.as_str()), &id_rows);
+    });
+}
+
+/// "2 h 15 min" / "48 min".
+fn duration_text(minutes: u32) -> String {
+    let (h, m) = (minutes / 60, minutes % 60);
+    if h == 0 { tr!("{0} min", m) } else { tr!("{0} h {1} min", h, m) }
 }
 
 fn grid(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, rows: &[(&str, String)]) {
@@ -719,8 +771,12 @@ fn read_batteries() -> Result<Vec<Battery>, String> {
     if let Ok(demo) = std::env::var("NYANSPECT_BATTERY_DEMO") {
         return Ok(demo_batteries(&demo));
     }
+    use starship_battery::units::electric_potential::volt;
     use starship_battery::units::energy::watt_hour;
+    use starship_battery::units::power::watt;
     use starship_battery::units::ratio::ratio;
+    use starship_battery::units::thermodynamic_temperature::degree_celsius;
+    use starship_battery::units::time::second;
     use starship_battery::State;
     let manager = starship_battery::Manager::new().map_err(|e| e.to_string())?;
     let mut out = Vec::new();
@@ -733,23 +789,81 @@ fn read_batteries() -> Result<Vec<Battery>, String> {
             continue;
         }
         let name = [b.vendor(), b.model()].iter().flatten().map(|s| s.trim()).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" ");
+        let text = |v: Option<&str>| v.and_then(clean);
+        let state = b.state();
+        let power = b.energy_rate().get::<watt>().abs();
+        let minutes = match state {
+            State::Charging => b.time_to_full(),
+            State::Discharging => b.time_to_empty(),
+            _ => None,
+        }
+        .map(|t| (t.get::<second>() / 60.0).round() as u32)
+        .filter(|m| *m > 0 && *m < 24 * 60);
+        let volts = b.voltage().get::<volt>();
+        let temp = b.temperature().map(|t| t.get::<degree_celsius>()).filter(|c| *c > -30.0 && *c < 120.0);
         out.push(Battery {
+            vendor: text(b.vendor()),
+            model: text(b.model()),
+            serial: text(b.serial_number()),
+            chemistry: chemistry(b.technology()),
+            voltage: (volts > 0.5).then_some(volts),
+            power_w: (power > 0.05 && matches!(state, State::Charging | State::Discharging)).then_some(power),
+            temperature_c: temp,
+            minutes_left: minutes,
+            charge_limit: None,
             name,
             health: (design > 0.1).then(|| full / design),
             full_wh: full,
             design_wh: design,
             charge: b.state_of_charge().get::<ratio>(),
-            state: match b.state() {
+            state: match state {
                 State::Charging => "Charging",
                 State::Discharging => "On battery",
                 State::Full => "Fully charged",
                 State::Empty => "Empty",
+                // Plugged in and topped up, or held at a charge limit.
+                _ if b.state_of_charge().get::<ratio>() >= 0.99 => "Fully charged",
                 _ => "Plugged in, not charging",
             },
             cycles: b.cycle_count(),
         });
     }
+    // The charge limit isn't in the battery's own data; Linux shows it in sysfs (only
+    // matched up when there's exactly one battery).
+    if out.len() == 1 {
+        out[0].charge_limit = linux_charge_limit();
+    }
     Ok(out)
+}
+
+fn chemistry(t: starship_battery::Technology) -> Option<&'static str> {
+    use starship_battery::Technology as T;
+    Some(match t {
+        T::LithiumIon => "Li-ion",
+        T::LithiumPolymer => "Li-polymer",
+        T::LithiumIronPhosphate => "LiFePO4",
+        T::NickelMetalHydride => "NiMH",
+        T::NickelCadmium => "NiCd",
+        T::NickelZinc => "NiZn",
+        T::LeadAcid => "Lead-acid",
+        T::RechargeableAlkalineManganese => "Alkaline",
+        _ => return None,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn linux_charge_limit() -> Option<u32> {
+    let dir = std::fs::read_dir("/sys/class/power_supply").ok()?;
+    dir.flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with("BAT"))
+        .find_map(|e| std::fs::read_to_string(e.path().join("charge_control_end_threshold")).ok())
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .filter(|l| *l > 0 && *l < 100)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn linux_charge_limit() -> Option<u32> {
+    None
 }
 
 /// Dev: NYANSPECT_BATTERY_DEMO=good|worn|none for screenshots.
@@ -767,6 +881,15 @@ fn demo_batteries(kind: &str) -> Vec<Battery> {
         charge: 0.64,
         state: "Charging",
         cycles: Some(cycles),
+        vendor: Some("Demo Co.".into()),
+        model: Some("A32N1A07".into()),
+        serial: Some("0C2F-9917".into()),
+        chemistry: Some("Li-polymer"),
+        voltage: Some(11.55),
+        power_w: Some(21.4),
+        temperature_c: Some(31.0),
+        minutes_left: Some(48),
+        charge_limit: Some(80),
     }]
 }
 
@@ -851,6 +974,12 @@ mod tests {
         assert_eq!(installed_gb(16.0), 16);
         assert_eq!(installed_gb(9.6), 12);
         assert_eq!(installed_gb(31.2), 32);
+    }
+
+    #[test]
+    fn durations() {
+        assert_eq!(duration_text(48), "48 min");
+        assert_eq!(duration_text(135), "2 h 15 min");
     }
 
     #[test]
