@@ -26,6 +26,8 @@ pub struct Settings {
     pub show_mascot: bool,
     /// Text size (egui zoom factor).
     pub ui_scale: f32,
+    /// Dark, light ("paper") or follow the system.
+    pub theme: crate::theme::ThemeChoice,
 }
 
 impl Default for Settings {
@@ -44,6 +46,7 @@ impl Default for Settings {
             reduce_motion: false,
             show_mascot: true,
             ui_scale: 1.0,
+            theme: crate::theme::ThemeChoice::Dark,
         }
     }
 }

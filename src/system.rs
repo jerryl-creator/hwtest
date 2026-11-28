@@ -222,7 +222,9 @@ impl SystemPage {
         Self { info: None, batteries: None, tx, rx, battery_asked: 0.0, battery_pending: true, viewed: false, copied_at: None }
     }
 
-    fn pull(&mut self) {
+    /// Pick up results from the background thread (called every frame, so the report has them
+    /// even if this page was never opened).
+    pub fn pull(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 Msg::Info(i) => self.info = Some(i),

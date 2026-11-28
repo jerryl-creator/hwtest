@@ -186,10 +186,12 @@ impl PixelTest {
                     match s.fill {
                         Fill::Solid(c) => {
                             theme::glow(p, center, 26.0, alpha(if c == Color32::BLACK { theme::SILVER } else { c }, 0.30));
-                            p.circle(center, 17.0, c, Stroke::new(2.0, alpha(Color32::WHITE, 0.7)));
+                            // The sample keeps its true colour in the light theme; the outline follows the theme.
+                            theme::keep_true_colour(p, p.add(egui::Shape::circle_filled(center, 17.0, c)));
+                            p.circle_stroke(center, 17.0, Stroke::new(2.0, alpha(Color32::WHITE, 0.7)));
                         }
                         Fill::Ramp(c) => {
-                            theme::hgradient(p, r, 17.0, Color32::BLACK, c);
+                            theme::keep_true_colour(p, theme::hgradient(p, r, 17.0, Color32::BLACK, c));
                             p.circle_stroke(center, 17.0, Stroke::new(2.0, alpha(Color32::WHITE, 0.7)));
                         }
                     }

@@ -72,6 +72,9 @@ struct App {
     reduce_motion: bool,
     show_mascot: bool,
     ui_scale: f32,
+    pub(crate) theme: theme::ThemeChoice,
+    /// Whether the window's title bar was last told to be light.
+    light_applied: Option<bool>,
     /// The language the user picked (None = follow the system).
     lang_choice: Option<i18n::Lang>,
     /// "Clear all results" asks for a second click until this time.
@@ -121,6 +124,8 @@ impl App {
             reduce_motion: saved.reduce_motion,
             show_mascot: saved.show_mascot,
             ui_scale: saved.ui_scale,
+            theme: dev_theme().unwrap_or(saved.theme),
+            light_applied: None,
             clear_armed_until: 0.0,
             cleared_at: None,
             statuses: Vec::new(),
@@ -281,6 +286,7 @@ impl eframe::App for App {
         s.reduce_motion = self.reduce_motion;
         s.show_mascot = self.show_mascot;
         s.ui_scale = self.ui_scale;
+        s.theme = self.theme;
         eframe::set_value(storage, settings::KEY, &s);
     }
 
@@ -401,8 +407,26 @@ impl eframe::App for App {
         for sound in self.keyboard.take_sounds() {
             self.speakers.play_sfx(sound);
         }
+        // Light theme: turn the finished frame into black ink on white paper.
+        let light = self.theme.is_light(ctx);
+        theme::finish_frame(ctx, light, self.bg.tone_texture());
+        if self.light_applied != Some(light) {
+            self.light_applied = Some(light);
+            let t = if light { egui::SystemTheme::Light } else { egui::SystemTheme::Dark };
+            ctx.send_viewport_cmd(egui::ViewportCommand::SetTheme(t));
+        }
         perf_report(ctx, perf_bg, perf_t0.elapsed());
         pace_frames(ctx, self.reduce_motion);
+    }
+}
+
+/// Dev: NYANSPECT_THEME=light|dark|system.
+fn dev_theme() -> Option<theme::ThemeChoice> {
+    match std::env::var("NYANSPECT_THEME").ok()?.as_str() {
+        "light" => Some(theme::ThemeChoice::Light),
+        "dark" => Some(theme::ThemeChoice::Dark),
+        "system" => Some(theme::ThemeChoice::System),
+        _ => None,
     }
 }
 

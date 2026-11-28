@@ -567,4 +567,11 @@ const DRIFT: &[[&str; 4]] = &[
     ["Integrated GPU", "集成显卡", "GPU bersepadu", "内蔵GPU"],
     ["Discrete GPU", "独立显卡", "GPU diskret", "専用GPU"],
     ["{0} GPU (no driver loaded)", "{0} 显卡（未加载驱动）", "GPU {0} (tiada pemacu dimuatkan)", "{0} GPU（ドライバー未読み込み）"],
+    ["Theme", "主题", "Tema", "テーマ"],
+    ["Dark", "深色", "Gelap", "ダーク"],
+    ["Light", "浅色", "Cerah", "ライト"],
+    ["Match system", "跟随系统", "Ikut sistem", "システムに合わせる"],
+    ["White ink on black", "黑底白字", "Dakwat putih di atas hitam", "黒地に白インク"],
+    ["Black ink on white paper, like a manga page; easier to read in bright rooms", "白纸黑字，像漫画书页一样；在明亮的房间里更容易看清", "Dakwat hitam di atas kertas putih, seperti halaman manga; lebih mudah dibaca di bilik yang terang", "白い紙に黒インク、マンガのページのように。明るい部屋でも見やすい"],
+    ["Follow your computer's light / dark setting", "跟随电脑的浅色 / 深色设置", "Ikut tetapan cerah / gelap komputer anda", "コンピューターのライト / ダーク設定に合わせます"],
 ];

@@ -283,7 +283,7 @@ fn rounded_points(rect: Rect, r: f32) -> Vec<Pos2> {
 }
 
 /// Rounded rect filled with a gradient. `color_at` maps (0..1, 0..1) position to colour.
-pub fn gradient_rect(painter: &egui::Painter, rect: Rect, r: f32, color_at: impl Fn(f32, f32) -> Color32) {
+pub fn gradient_rect(painter: &egui::Painter, rect: Rect, r: f32, color_at: impl Fn(f32, f32) -> Color32) -> egui::layers::ShapeIdx {
     let pts = rounded_points(rect, r);
     let mut mesh = Mesh::default();
     let uv = |p: Pos2| ((p.x - rect.left()) / rect.width(), (p.y - rect.top()) / rect.height());
@@ -297,15 +297,15 @@ pub fn gradient_rect(painter: &egui::Painter, rect: Rect, r: f32, color_at: impl
     for i in 0..n {
         mesh.add_triangle(0, 1 + i, 1 + (i + 1) % n);
     }
-    painter.add(Shape::mesh(mesh));
+    painter.add(Shape::mesh(mesh))
 }
 
 pub fn vgradient(painter: &egui::Painter, rect: Rect, r: f32, top: Color32, bottom: Color32) {
     gradient_rect(painter, rect, r, |_, v| lerp_color(top, bottom, v));
 }
 
-pub fn hgradient(painter: &egui::Painter, rect: Rect, r: f32, left: Color32, right: Color32) {
-    gradient_rect(painter, rect, r, |u, _| lerp_color(left, right, u));
+pub fn hgradient(painter: &egui::Painter, rect: Rect, r: f32, left: Color32, right: Color32) -> egui::layers::ShapeIdx {
+    gradient_rect(painter, rect, r, |u, _| lerp_color(left, right, u))
 }
 
 /// Soft radial glow: solid in the centre fading to transparent.
@@ -637,6 +637,11 @@ impl Background {
         }
     }
 
+    /// The screentone picture's texture (the light theme turns its dots black).
+    pub fn tone_texture(&self) -> Option<egui::TextureId> {
+        self.tone.as_ref().map(|(_, _, t)| t.id())
+    }
+
     pub fn paint(&mut self, ctx: &egui::Context) {
         let screen = ctx.content_rect();
         let (t, dt) = ctx.input(|i| (i.time as f32, i.stable_dt.min(0.05)));
@@ -883,9 +888,198 @@ impl Mascot {
     }
 }
 
+// ---------------------------------------------------------------- light ("paper") theme
+
+/// Which look the app uses.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum ThemeChoice {
+    #[default]
+    Dark,
+    Light,
+    /// Follow the system's light / dark setting.
+    System,
+}
+
+impl ThemeChoice {
+    pub fn is_light(self, ctx: &egui::Context) -> bool {
+        match self {
+            ThemeChoice::Dark => false,
+            ThemeChoice::Light => true,
+            ThemeChoice::System => ctx.system_theme() == Some(egui::Theme::Light),
+        }
+    }
+}
+
+/// The light theme turns the frame into "paper": every grey is flipped (white ink on black
+/// becomes black ink on white), so the whole app follows without each page needing two
+/// sets of colours. Real colours (red, green…) and pictures (the camera) stay as they are.
+///
+/// Called at the end of the frame, after everything is painted. `tone` is the screentone
+/// texture, whose white dots should turn into black ones.
+const KEEP_ID: &str = "paper-keep";
+
+/// Mark a painted shape as a true colour the light theme must not flip (test-screen samples:
+/// "White" has to stay white). Takes what `Painter::add` returned.
+pub fn keep_true_colour(p: &egui::Painter, idx: egui::layers::ShapeIdx) {
+    let layer = p.layer_id();
+    p.ctx().data_mut(|d| d.get_temp_mut_or_default::<Vec<(egui::LayerId, usize)>>(egui::Id::unique(KEEP_ID)).push((layer, idx.0)));
+}
+
+/// End of frame: in the light theme turn the frame into paper; forget this frame's true-colour marks.
+pub fn finish_frame(ctx: &egui::Context, light: bool, tone: Option<egui::TextureId>) {
+    let keep: Vec<(egui::LayerId, usize)> = ctx.data_mut(|d| d.remove_temp(egui::Id::unique(KEEP_ID))).unwrap_or_default();
+    if light {
+        to_paper(ctx, tone, &keep);
+    }
+}
+
+fn to_paper(ctx: &egui::Context, tone: Option<egui::TextureId>, keep: &[(egui::LayerId, usize)]) {
+    use egui::{layers::ShapeIdx, LayerId, Order};
+    let mut layers: Vec<LayerId> = ctx.memory(|m| m.layer_ids().collect());
+    // Layers painted directly (not windows / areas) aren't in the memory's list.
+    layers.push(LayerId::background());
+    layers.push(LayerId::new(Order::Foreground, egui::Id::unique("sparks")));
+    layers.push(LayerId::new(Order::Foreground, egui::Id::unique("sfx")));
+    let mut seen = std::collections::HashSet::new();
+    layers.retain(|l| seen.insert(*l)); // flipping twice would undo it
+    let keep_texture = |id: egui::TextureId| id != egui::TextureId::default() && Some(id) != tone;
+    ctx.graphics_mut(|g| {
+        for layer in layers {
+            if let Some(list) = g.get_mut(layer) {
+                for i in 0..list.next_idx().0 {
+                    if !keep.contains(&(layer, i)) {
+                        list.mutate_shape(ShapeIdx(i), |cs| paper_shape(&mut cs.shape, &keep_texture));
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// Flip a colour's lightness (premultiplied alpha), keeping its hue. Clearly coloured
+/// colours are left alone: they mean something (a red test screen, a coloured button).
+pub fn paper(c: Color32) -> Color32 {
+    let [r, g, b, a] = c.to_array();
+    if a == 0 {
+        return c;
+    }
+    let (mx, mn) = (r.max(g).max(b) as f32, r.min(g).min(b) as f32);
+    if (mx - mn) * 255.0 / a as f32 > 48.0 {
+        return c;
+    }
+    let luma = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
+    let shift = a as f32 - 2.0 * luma;
+    let ch = |v: u8| (v as f32 + shift).round().clamp(0.0, a as f32) as u8;
+    Color32::from_rgba_premultiplied(ch(r), ch(g), ch(b), a)
+}
+
+fn paper_stroke(s: &mut Stroke) {
+    s.color = paper(s.color);
+}
+
+fn paper_path_stroke(s: &mut egui::epaint::PathStroke) {
+    use egui::epaint::ColorMode;
+    s.color = match std::mem::replace(&mut s.color, ColorMode::Solid(Color32::TRANSPARENT)) {
+        ColorMode::Solid(c) => ColorMode::Solid(paper(c)),
+        ColorMode::UV(f) => ColorMode::UV(std::sync::Arc::new(move |r, p| paper(f(r, p)))),
+    };
+}
+
+fn paper_shape(shape: &mut Shape, keep_texture: &impl Fn(egui::TextureId) -> bool) {
+    match shape {
+        Shape::Noop | Shape::Callback(_) => {}
+        Shape::Vec(v) => v.iter_mut().for_each(|s| paper_shape(s, keep_texture)),
+        Shape::Circle(c) => {
+            c.fill = paper(c.fill);
+            paper_stroke(&mut c.stroke);
+        }
+        Shape::Ellipse(e) => {
+            e.fill = paper(e.fill);
+            paper_stroke(&mut e.stroke);
+        }
+        Shape::LineSegment { stroke, .. } => paper_stroke(stroke),
+        Shape::Path(p) => {
+            p.fill = paper(p.fill);
+            paper_path_stroke(&mut p.stroke);
+        }
+        Shape::Band(b) => {
+            b.fill = paper(b.fill);
+            paper_stroke(&mut b.stroke);
+        }
+        Shape::Rect(r) => {
+            // An image's tint stays (a camera picture keeps its colours).
+            if r.brush.as_ref().is_none_or(|b| !keep_texture(b.fill_texture_id)) {
+                r.fill = paper(r.fill);
+            }
+            paper_stroke(&mut r.stroke);
+        }
+        Shape::Text(t) => paper_text(t),
+        Shape::Mesh(m) => {
+            if !keep_texture(m.texture_id) {
+                for v in &mut std::sync::Arc::make_mut(m).vertices {
+                    v.color = paper(v.color);
+                }
+            }
+        }
+        Shape::QuadraticBezier(b) => {
+            b.fill = paper(b.fill);
+            paper_path_stroke(&mut b.stroke);
+        }
+        Shape::CubicBezier(b) => {
+            b.fill = paper(b.fill);
+            paper_path_stroke(&mut b.stroke);
+        }
+    }
+}
+
+fn paper_text(t: &mut egui::epaint::TextShape) {
+    t.fallback_color = paper(t.fallback_color);
+    paper_stroke(&mut t.underline);
+    if let Some(c) = t.override_text_color {
+        t.override_text_color = Some(paper(c));
+        return;
+    }
+    // Most text is one colour: override it instead of copying the glyphs.
+    let colors: Vec<Color32> = t.galley.job.sections.iter().map(|s| s.format.color).collect();
+    if colors.iter().all(|c| *c == Color32::PLACEHOLDER) {
+        return; // drawn in fallback_color, already flipped
+    }
+    if colors.windows(2).all(|w| w[0] == w[1]) {
+        t.override_text_color = Some(paper(colors[0]));
+        return;
+    }
+    let galley = std::sync::Arc::make_mut(&mut t.galley);
+    for row in &mut galley.rows {
+        for v in &mut std::sync::Arc::make_mut(&mut row.row).visuals.mesh.vertices {
+            if v.color != Color32::PLACEHOLDER {
+                v.color = paper(v.color);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Mascot;
+
+    #[test]
+    fn paper_flips_greys_and_keeps_colours() {
+        use super::paper;
+        use eframe::egui::Color32;
+        assert_eq!(paper(Color32::BLACK), Color32::WHITE);
+        assert_eq!(paper(Color32::WHITE), Color32::BLACK);
+        assert_eq!(paper(Color32::TRANSPARENT), Color32::TRANSPARENT);
+        // 50% white over anything becomes 50% black.
+        let half_white = Color32::from_white_alpha(128);
+        let flipped = paper(half_white);
+        assert_eq!(flipped.a(), 128);
+        assert!(flipped.r() <= 1, "{flipped:?}");
+        // A red test screen stays red.
+        assert_eq!(paper(Color32::RED), Color32::RED);
+        // Mid grey stays close to mid grey.
+        let g = paper(Color32::from_gray(128));
+        assert!((g.r() as i32 - 127).abs() <= 1);
+    }
 
     /// Where egui puts a glyph's baseline below the row top (same formula as epaint's layout).
     fn baseline(lead: [f32; 4], face: [f32; 4], offset: f32) -> f32 {

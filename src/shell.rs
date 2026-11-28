@@ -60,6 +60,7 @@ fn status_text(status: Status) -> &'static str {
 impl App {
     /// Work out every test page's result once for this frame.
     pub(crate) fn refresh_statuses(&mut self) {
+        self.system.pull();
         let tabs = [Tab::System, Tab::Keyboard, Tab::Mouse, Tab::Gamepad, Tab::Display, Tab::Audio, Tab::Camera];
         self.statuses = tabs.iter().filter_map(|t| self.compute_status(*t).map(|s| (*t, s))).collect();
     }
@@ -471,6 +472,17 @@ impl App {
             theme::card().show(&mut cols[1], |ui| {
                 ui.set_min_width(ui.available_width());
                 theme::card_title(ui, "Look & sound", "見た目と音", self.cjk);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(t("Theme")).font(theme::bold(14.0)).color(Color32::WHITE));
+                    ui.add_space(6.0);
+                    let opts = [
+                        (theme::ThemeChoice::Dark, t("Dark"), t("White ink on black")),
+                        (theme::ThemeChoice::Light, t("Light"), t("Black ink on white paper, like a manga page; easier to read in bright rooms")),
+                        (theme::ThemeChoice::System, t("Match system"), t("Follow your computer's light / dark setting")),
+                    ];
+                    theme::segmented(ui, "set-theme", &opts, &mut self.theme);
+                });
+                ui.add_space(10.0);
                 theme::toggle(ui, &mut self.keyboard.sfx.enabled, t("Keyboard sound effects"), t("Anime pop-ups and sounds when you press keys"));
                 ui.add_space(8.0);
                 if theme::toggle(ui, &mut self.reduce_motion, t("Reduce motion"), t("Stops the falling petals and page animations; also easier on slow PCs")) {
