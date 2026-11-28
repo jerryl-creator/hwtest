@@ -240,10 +240,62 @@ impl App {
                 ui.add_space(6.0);
                 if self.show_mascot {
                     self.mascot.ui(ui);
+                    ui.add_space(10.0);
                 }
+                self.theme_button(ui);
             });
         });
         ui.add_space(4.0);
+    }
+
+    /// Round sun / moon button: one click between dark and light (Settings also has "Match system").
+    fn theme_button(&mut self, ui: &mut egui::Ui) {
+        let light = self.theme.is_light(ui.ctx());
+        let (r, resp) = ui.allocate_exact_size(Vec2::splat(38.0), Sense::CLICK);
+        let tip = if light { t("Switch to the dark theme") } else { t("Switch to the light theme") };
+        let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip);
+        let hover = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.15);
+        let p = ui.painter();
+        let c = r.center();
+        // Drawn in "white ink": the light theme flips it to black like everything else.
+        p.circle_filled(c, 18.0, alpha(Color32::WHITE, 0.05 + 0.08 * hover));
+        p.circle_stroke(c, 18.0, Stroke::new(1.2, alpha(theme::LIGHT, 0.35 + 0.4 * hover)));
+        let ink = Stroke::new(1.8, Color32::WHITE);
+        if light {
+            // Moon: a crescent outline (outer circle minus an offset inner circle).
+            let (outer, inner, off) = (8.0f32, 7.0f32, Vec2::new(4.5, -3.5));
+            let mut pts = Vec::new();
+            for i in 0..=64 {
+                let a = i as f32 / 64.0 * std::f32::consts::TAU;
+                let q = c + Vec2::angled(a) * outer;
+                if (q - (c + off)).length() >= inner {
+                    pts.push(q);
+                }
+            }
+            let mut inside = Vec::new();
+            for i in 0..=64 {
+                let a = i as f32 / 64.0 * std::f32::consts::TAU;
+                let q = c + off + Vec2::angled(a) * inner;
+                if (q - c).length() <= outer {
+                    inside.push(q);
+                }
+            }
+            // Walk the outer arc, then come back along the inner arc.
+            pts.sort_by(|a, b| angle_from(c, off, *a).total_cmp(&angle_from(c, off, *b)));
+            inside.sort_by(|a, b| angle_from(c, off, *b).total_cmp(&angle_from(c, off, *a)));
+            pts.extend(inside);
+            p.add(egui::Shape::closed_line(pts, ink));
+        } else {
+            // Sun: a ring and eight rays.
+            p.circle_stroke(c, 4.5, ink);
+            for k in 0..8 {
+                let d = Vec2::angled(k as f32 * std::f32::consts::FRAC_PI_4);
+                p.line_segment([c + d * 7.5, c + d * 10.0], ink);
+            }
+        }
+        if resp.clicked() {
+            self.theme = if light { theme::ThemeChoice::Dark } else { theme::ThemeChoice::Light };
+        }
     }
 
     // ---------------------------------------------------------------- Home
@@ -502,6 +554,12 @@ impl App {
             });
         });
     }
+}
+
+/// Angle of `q` around `c`, measured from the direction of `off` (where the crescent has its
+/// gap), so the crescent's points sort into one continuous outline.
+fn angle_from(c: Pos2, off: Vec2, q: Pos2) -> f32 {
+    ((q - c).angle() - off.angle()).rem_euclid(std::f32::consts::TAU)
 }
 
 /// A flat, outlined secondary button.
