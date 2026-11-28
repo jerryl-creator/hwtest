@@ -75,6 +75,13 @@ download the file for your system and run it. Nyanspect supports Windows 10/11 a
 | Linux, 64-bit Intel or AMD (x86_64) | `nyanspect-linux-x86_64.tar.gz` |
 | Linux, 64-bit ARM (e.g. Raspberry Pi 4/5 with a 64-bit OS, ARM laptops) | `nyanspect-linux-arm64.tar.gz` |
 
+> **🙏 Have an ARM laptop? Please help test.** The ARM builds (`nyanspect-arm64.exe` for Windows on ARM, such as
+> Snapdragon X laptops, and `nyanspect-linux-arm64.tar.gz`) are built automatically but haven't been tried on real ARM
+> hardware yet. If you have one, run Nyanspect, go through the **▶ Quick check**, and
+> [open an issue](https://github.com/jerryl-creator/nyanspect/issues/new) to tell us how it went: your laptop model
+> and anything that didn't work or looked wrong (screenshots or the saved report help a lot). Even "everything worked"
+> is useful to hear. Thank you!
+
 ### Windows
 
 Double-click the `.exe`; there's no installer. Not sure which one? Open **Settings → System → About** and check
